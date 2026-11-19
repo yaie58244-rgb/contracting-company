@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 import type { StagedProperty } from "@/lib/import-utils";
 
 export type ImportProgress={phase:"staging"|"processing";done:number;total:number;created:number;skipped:number;failed:number};

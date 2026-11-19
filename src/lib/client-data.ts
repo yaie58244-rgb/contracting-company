@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type ClientAddress={governorate:string;area:string;sector:string;distribution:string;block:string;street:string;avenue:string;building:string;floor:string;apartment:string;postalCode:string;landmark:string};
 export const emptyClientAddress:ClientAddress={governorate:"",area:"",sector:"",distribution:"",block:"",street:"",avenue:"",building:"",floor:"",apartment:"",postalCode:"",landmark:""};

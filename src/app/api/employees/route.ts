@@ -1,4 +1,4 @@
-import { getNeonAuth } from "@/lib/neon/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -6,49 +6,33 @@ function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-async function getManagerToken(request: Request, authBaseUrl: string) {
+function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization");
-  if (authorization?.startsWith("Bearer ")) return authorization.slice(7);
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return null;
-  const response = await fetch(`${authBaseUrl.replace(/\/$/, "")}/token`, {
-    headers: { cookie, Accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!response.ok) return null;
-  const result = (await response.json()) as { token?: string };
-  return result.token ?? null;
-}
-
-async function callDataApi(url: string, token: string, rpc: string, body: Record<string, unknown>): Promise<unknown> {
-  const response = await fetch(`${url.replace(/\/$/, "")}/rpc/${rpc}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const failure = payload as { message?: string; details?: string } | null;
-    throw new Error(failure?.message ?? failure?.details ?? `Database request failed (${response.status})`);
-  }
-  return payload;
+  return authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
 }
 
 export async function POST(request: Request) {
-  const auth = getNeonAuth();
-  const authBaseUrl = process.env.NEON_AUTH_BASE_URL;
-  const dataApiUrl = process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
-  if (!auth || !authBaseUrl || !dataApiUrl) return jsonError("إعداد Neon غير مكتمل على هذا النشر.", 503);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !anonKey || !serviceKey) return jsonError("إعداد Supabase غير مكتمل على هذا النشر.", 503);
+
+  const token = bearerToken(request);
+  if (!token) return jsonError("سجّل الدخول أولاً.", 401);
 
   try {
-    const { data } = await auth.getSession();
-    if (!data?.user) return jsonError("سجّل الدخول أولاً.", 401);
-    const token = await getManagerToken(request, authBaseUrl);
-    if (!token) return jsonError("انتهت الجلسة. سجّل الدخول مرة أخرى.", 401);
+    // Validate the caller with their own access token so every permission check
+    // runs against the same identity that the database policies see.
+    const userClient = createSupabaseClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
-    // Authorization is checked in Postgres before an Auth identity is created.
-    const canManage = await callDataApi(dataApiUrl, token, "can_manage_users", {});
+    const { data: userResult, error: userError } = await userClient.auth.getUser(token);
+    if (userError || !userResult.user) return jsonError("انتهت الجلسة. سجّل الدخول مرة أخرى.", 401);
+
+    const { data: canManage, error: permissionError } = await userClient.rpc("can_manage_users");
+    if (permissionError) throw permissionError;
     if (canManage !== true) return jsonError("حسابك لا يملك صلاحية إضافة الموظفين.", 403);
 
     const input = await request.json() as {
@@ -63,44 +47,47 @@ export async function POST(request: Request) {
       return jsonError("راجع الاسم والبريد وكلمة المرور (10 أحرف على الأقل) والدور.", 400);
     }
 
-    const signup = await fetch(`${authBaseUrl.replace(/\/$/, "")}/sign-up/email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", ...(request.headers.get("origin") ? { Origin: request.headers.get("origin")! } : {}) },
-      body: JSON.stringify({ name, email, password }),
-      cache: "no-store",
+    // The service role key never leaves the server; it is only used to create the
+    // login account and to write the profile row that links it to a role.
+    const admin = createSupabaseClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-    const signupBody = await signup.json().catch(() => null) as { user?: { id?: string }; message?: string; error?: string } | null;
-    if (!signup.ok || !signupBody?.user?.id) {
-      const message = signupBody?.message ?? signupBody?.error ?? "تعذر إنشاء حساب الدخول. تحقق من إعداد السماح بإنشاء الحسابات في Neon Auth.";
-      return jsonError(message, signup.status === 429 ? 429 : 400);
+
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { name },
+    });
+    if (createError || !created.user) {
+      return jsonError(createError?.message ?? "تعذر إنشاء حساب الدخول.", 400);
     }
 
-    try {
-      const profileInput = {
-        p_auth_user_id: signupBody.user.id,
-        p_name: name,
-        p_email: email,
-        p_role_id: roleId,
-        p_phone_visible: input.phoneVisible === true,
-        p_price_visible: input.priceVisible === true,
-      };
-      let linked = false;
-      for (let attempt = 0; attempt < 5 && !linked; attempt += 1) {
-        try {
-          await callDataApi(dataApiUrl, token, "create_employee_profile", profileInput);
-          linked = true;
-        } catch (error) {
-          const pendingSync = error instanceof Error && error.message.includes("Neon Auth user was not found yet");
-          if (!pendingSync || attempt === 4) throw error;
-          await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
-        }
-      }
-    } catch (error) {
-      // The account is still a valid viewer if a concurrent Neon Auth sync
-      // delays profile linking; explain that it can be retried after refresh.
-      const message = error instanceof Error ? error.message : "تعذر ربط حساب الدخول بملف الموظف.";
-      return jsonError(`تم إنشاء حساب الدخول، لكن لم يكتمل ربط ملف الموظف: ${message}`, 502);
+    const { error: profileError } = await admin.from("profiles").insert({
+      id: created.user.id,
+      auth_user_id: created.user.id,
+      full_name: name,
+      email,
+      role_id: roleId,
+      manager_id: userResult.user.id,
+      phone_visible: input.phoneVisible === true,
+      price_visible: input.priceVisible === true,
+    });
+
+    if (profileError) {
+      // Do not leave an orphan login account behind.
+      await admin.auth.admin.deleteUser(created.user.id).catch(() => null);
+      throw profileError;
     }
+
+    await admin.from("audit_logs").insert({
+      actor_id: userResult.user.id,
+      action: "create",
+      entity_type: "profile",
+      entity_id: created.user.id,
+      after_data: { full_name: name, email, role_id: roleId },
+    }).then(({ error }) => { if (error) console.warn("audit log failed", error.message); });
+
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر إضافة الموظف.";

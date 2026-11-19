@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type RolePermission={roleId:string;permissionId:string;allowed:boolean};
 export type RoleRecord={id:string;name:string;nameAr:string;system:boolean;permissions:RolePermission[]};

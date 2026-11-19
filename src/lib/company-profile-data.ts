@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type CompanyProfile={name_ar:string;name_en:string|null;phone:string|null;fax:string|null;address:string|null;logo_url:string|null};
 export async function fetchCompanyProfile():Promise<CompanyProfile>{const {data,error}=await createClient().from("company_profile").select("name_ar,name_en,phone,fax,address,logo_url").eq("id",1).single();if(error)throw error;return data as CompanyProfile;}

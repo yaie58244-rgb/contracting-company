@@ -5,7 +5,7 @@ import { fetchRecycleBin, restoreRecycleItem, type RecycleBinItem } from "@/lib/
 
 export function RecycleBinPage(){
   const [items,setItems]=useState<RecycleBinItem[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState<string|null>(null),[error,setError]=useState("");
-  const refresh=useCallback(async()=>{setLoading(true);setError("");try{setItems(await fetchRecycleBin())}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل سلة المحذوفات. يلزم حساب مدير وتطبيق ترحيل Neon رقم 003.")}finally{setLoading(false)}},[]);
+  const refresh=useCallback(async()=>{setLoading(true);setError("");try{setItems(await fetchRecycleBin())}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل سلة المحذوفات. يلزم حساب مدير وتطبيق ترحيل Supabase رقم 003.")}finally{setLoading(false)}},[]);
   useEffect(()=>{void refresh()},[refresh]);
   const restore=async(item:RecycleBinItem)=>{setBusy(item.item_id);setError("");try{await restoreRecycleItem(item.item_type,item.item_id);setItems(old=>old.filter(x=>x.item_id!==item.item_id));}catch(e){setError(e instanceof Error?e.message:"تعذرت استعادة العنصر.")}finally{setBusy(null)}};
   return <div className="animate-in space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><div className="mb-1 text-xs font-bold text-teal-600">إدارة البيانات المحذوفة</div><h1 className="text-[26px] font-black tracking-tight">سلة المحذوفات</h1><p className="mt-1 text-xs text-slate-400">عرض العقارات والعملاء المؤرشفة وسبب حذفها واستعادتها</p></div><button onClick={()=>void refresh()} disabled={loading} className="glass flex h-10 items-center gap-2 rounded-xl px-3 text-xs text-slate-600 disabled:opacity-50"><RefreshCw size={14} className={loading?"animate-spin":""}/> تحديث</button></div>

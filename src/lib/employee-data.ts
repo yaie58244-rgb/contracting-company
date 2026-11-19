@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type EmployeeRecord = {
   id: string;

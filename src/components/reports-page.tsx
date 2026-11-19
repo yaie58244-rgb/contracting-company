@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Download, FileText, PieChart, TrendingUp } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { money } from "@/lib/utils";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 type GroupBy="area"|"type"|"employee"|"status";
 const labels:Record<GroupBy,string>={area:"المنطقة",type:"نوع العقار",employee:"الموظف",status:"الحالة"};

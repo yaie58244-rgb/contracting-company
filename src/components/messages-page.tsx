@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { LoaderCircle, MessageCircle, Paperclip, Send, Users } from "lucide-react";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 import { fetchStaffMembers, fetchStaffMessages, sendStaffMessage, type StaffMember, type StaffMessage } from "@/lib/staff-messages-data";
 
 export function MessagesPage(){
   const [messages,setMessages]=useState<StaffMessage[]>([]),[staff,setStaff]=useState<StaffMember[]>([]),[userId,setUserId]=useState(""),[recipient,setRecipient]=useState(""),[body,setBody]=useState(""),[attachment,setAttachment]=useState(""),[loading,setLoading]=useState(true),[sending,setSending]=useState(false),[error,setError]=useState(""),[success,setSuccess]=useState("");
-  const refresh=useCallback(async()=>{try{const [people,rows,{data:{user},error:userError}]=await Promise.all([fetchStaffMembers(),fetchStaffMessages(),createClient().auth.getUser()]);if(userError)throw userError;setStaff(people);setMessages(rows);setUserId(user?.id??"")}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل الرسائل. تحقق من صلاحيات Neon.")}finally{setLoading(false)}},[]);
+  const refresh=useCallback(async()=>{try{const [people,rows,{data:{user},error:userError}]=await Promise.all([fetchStaffMembers(),fetchStaffMessages(),createClient().auth.getUser()]);if(userError)throw userError;setStaff(people);setMessages(rows);setUserId(user?.id??"")}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل الرسائل. تحقق من صلاحيات المنصة.")}finally{setLoading(false)}},[]);
   useEffect(()=>{void refresh();const timer=window.setInterval(()=>void refresh(),15000);return()=>window.clearInterval(timer)},[refresh]);
   const visible=useMemo(()=>messages.filter(m=>recipient===""||m.recipient_id===recipient||m.sender_id===recipient||m.recipient_id===null),[messages,recipient]);
   const submit=async(e:FormEvent)=>{e.preventDefault();if(!body.trim()&&!attachment.trim()){setError("اكتب رسالة أو أضف رابط مرفق.");return}if(attachment.trim()&&!/^https:\/\//i.test(attachment.trim())){setError("رابط المرفق يجب أن يبدأ بـ https://");return}setSending(true);setError("");setSuccess("");try{await sendStaffMessage(recipient||null,body.trim(),attachment.trim());setBody("");setAttachment("");setSuccess("تم إرسال الرسالة.");await refresh()}catch(e){setError(e instanceof Error?e.message:"تعذر إرسال الرسالة. قد لا تملك صلاحية التعميم.")}finally{setSending(false)}};

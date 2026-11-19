@@ -6,7 +6,7 @@ import { fetchNotifications, setNotificationState, type NotificationRecord } fro
 type Tab="all"|"unread"|"trash";
 export function NotificationsPage(){
  const [items,setItems]=useState<NotificationRecord[]>([]),[tab,setTab]=useState<Tab>("all"),[loading,setLoading]=useState(true),[busy,setBusy]=useState<string|null>(null),[error,setError]=useState("");
- const refresh=useCallback(async()=>{try{setItems(await fetchNotifications());setError("")}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل الإشعارات. طبّق ترحيل Neon رقم 010.")}finally{setLoading(false)}},[]);
+ const refresh=useCallback(async()=>{try{setItems(await fetchNotifications());setError("")}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل الإشعارات. طبّق ترحيل Supabase رقم 010.")}finally{setLoading(false)}},[]);
  useEffect(()=>{void refresh();const timer=window.setInterval(()=>void refresh(),30000);return()=>window.clearInterval(timer)},[refresh]);
  const visible=useMemo(()=>items.filter(item=>tab==="trash"?Boolean(item.deleted_at):!item.deleted_at&&(tab==="all"||!item.read_at)),[items,tab]);
  const change=async(item:NotificationRecord,action:"read"|"archive"|"restore")=>{setBusy(item.id);setError("");try{await setNotificationState(item.id,action);await refresh()}catch(e){setError(e instanceof Error?e.message:"تعذر تحديث الإشعار.")}finally{setBusy(null)}};

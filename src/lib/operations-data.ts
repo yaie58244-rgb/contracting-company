@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type FollowUp={id:string;title:string;client:string;property:string;dueAt:string;notes:string;completed:boolean};
 export type Appointment={id:string;title:string;client:string;startsAt:string;location:string;notes:string};

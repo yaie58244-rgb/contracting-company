@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type PropertyRequest={id:string;clientId:string;clientName:string;type:string;area:string;minSize:number|null;maxSize:number|null;minPrice:number|null;maxPrice:number|null;notes:string;status:string;createdAt:string;assignedTo:string|null};
 export type RequestMatch={property_id:string;code:string;property_type:string;area:string;area_m2:number|null;asking_price_kwd:number|null;score:number;employee:string};

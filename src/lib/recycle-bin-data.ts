@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type RecycleBinItem={item_type:"property"|"client";item_id:string;label:string;deleted_at:string;deleted_by:string|null;deletion_comment:string|null};
 

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, LoaderCircle, Plus, UserRound, Users, X } from "lucide-react";
 import { fetchEmployees, updateEmployee, type EmployeeRecord } from "@/lib/employee-data";
 import { fetchRoleMatrix, type RoleRecord } from "@/lib/role-data";
+import { createClient } from "@/lib/supabase/client";
 
 const blank = { name: "", email: "", password: "", roleId: "", phoneVisible: false, priceVisible: false };
 
@@ -26,7 +27,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
       setEmployees(people); setRoles(matrix.roles);
       setForm(current => ({ ...current, roleId: current.roleId || matrix.roles.find(role => role.name === "sales_agent")?.id || matrix.roles[0]?.id || "" }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "تعذر تحميل الموظفين. تحقق من صلاحيات المستخدم وترحيل Neon.");
+      setError(cause instanceof Error ? cause.message : "تعذر تحميل الموظفين. تحقق من صلاحيات المستخدم وترحيل قاعدة البيانات.");
     } finally { setLoading(false); }
   }, [remote]);
 
@@ -35,8 +36,12 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setSaving(true); setError(""); setMessage("");
     try {
+      const { data: sessionData } = await createClient().auth.getSession();
+      const accessToken = sessionData.session?.access_token;
       const response = await fetch("/api/employees", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        body: JSON.stringify(form),
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "تعذر إضافة الموظف.");
@@ -61,7 +66,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
     <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="mb-1 text-xs font-bold text-teal-600">إدارة الوصول</div><h1 className="text-[26px] font-black tracking-tight">الموظفون والمستخدمون</h1><p className="mt-1 text-xs text-slate-400">إنشاء حسابات دخول للموظفين وتحديد أدوارهم وحالة الحساب</p></div>
       <button onClick={() => { setError(""); setShowCreate(true); }} disabled={!remote} className="flex h-10 items-center gap-2 rounded-xl bg-teal-500 px-4 text-xs font-bold text-white outline-none transition focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16}/> إضافة موظف</button>
     </div>
-    {!remote && <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><AlertTriangle size={15}/> اربط Neon لعرض الموظفين وحفظ حساباتهم بشكل فعلي.</div>}
+    {!remote && <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><AlertTriangle size={15}/> اربط Supabase لعرض الموظفين وحفظ حساباتهم بشكل فعلي.</div>}
     {error && <div role="alert" className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-xs text-rose-700"><AlertTriangle size={15}/><span>{error}</span></div>}
     {message && <div className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">{message}</div>}
     <section className="glass panel overflow-hidden"><div className="flex items-center justify-between border-b border-slate-200/60 p-5 dark:border-slate-700"><div><h2 className="text-sm font-extrabold">حسابات فريق العمل</h2><p className="mt-1 text-[10px] text-slate-400">{employees.length} موظف</p></div><Users size={20} className="text-teal-600"/></div>

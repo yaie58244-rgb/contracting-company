@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = { title:"عقار | إدارة العقارات والعملاء", description:"منصة ذكية لإدارة العقارات والعملاء في الكويت" };
 
-// Warm up the Neon connections while the bundle loads so the first data request
-// does not pay for DNS and TLS handshakes.
+// Warm up the Supabase connection while the bundle loads so the first data
+// request does not pay for DNS and TLS handshakes.
 function originOf(value: string | undefined) {
   if (!value) return null;
   try {
@@ -14,10 +14,8 @@ function originOf(value: string | undefined) {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const origins = [
-    originOf(process.env.NEXT_PUBLIC_NEON_DATA_API_URL),
-    originOf(process.env.NEXT_PUBLIC_NEON_AUTH_URL),
-  ].filter((value): value is string => Boolean(value));
+  const origins = [...new Set([originOf(process.env.NEXT_PUBLIC_SUPABASE_URL)])]
+    .filter((value): value is string => Boolean(value));
 
   return <html lang="ar" dir="rtl" suppressHydrationWarning><head>{origins.map(origin => <link key={origin} rel="preconnect" href={origin} crossOrigin="anonymous" />)}</head><body>{children}</body></html>;
 }

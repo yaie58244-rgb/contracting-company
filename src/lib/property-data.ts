@@ -2,7 +2,7 @@
 
 import type { Property } from "@/lib/types";
 import type { ClientRecord } from "@/lib/client-data";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 type LookupRow = { id:string; type:string; name_ar:string };
 type PropertyRow = { id:string; code:string; client_id:string|null; type_id:string|null; offer_type_id:string|null; area_id:string|null; location_type_id:string|null; block:string|null; plot:string|null; street:string|null; avenue:string|null; floor:string|null; building_type:string|null; rooms_details:string|null; source_excel:Record<string,unknown>|null; sector:string|null;distribution:string|null;area_m2:number|null; asking_price_kwd:number|null; assigned_to:string|null; status:Property["status"]; entry_date:string; details:string|null;has_map:boolean;has_contact:boolean;has_location:boolean;last_contact_at:string|null;latitude:number|null;longitude:number|null };

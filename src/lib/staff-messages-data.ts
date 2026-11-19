@@ -1,5 +1,5 @@
 "use client";
-import { createClient } from "@/lib/neon/client";
+import { createClient } from "@/lib/supabase/client";
 
 export type StaffMember={id:string;full_name:string};
 export type StaffMessage={id:string;sender_id:string;sender_name:string;recipient_id:string|null;recipient_name:string|null;body:string;attachment_url:string|null;created_at:string};

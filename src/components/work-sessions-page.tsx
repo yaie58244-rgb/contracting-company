@@ -5,7 +5,7 @@ import { endWorkSession, fetchWorkSessions, startWorkSession, terminateWorkSessi
 
 export function WorkSessionsPage(){
   const [rows,setRows]=useState<WorkSession[]>([]),[userId,setUserId]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
-  const refresh=useCallback(async()=>{try{const result=await fetchWorkSessions();setRows(result.rows);setUserId(result.userId)}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل سجل الحضور. تحقق من صلاحية Neon.")}finally{setLoading(false)}},[]);
+  const refresh=useCallback(async()=>{try{const result=await fetchWorkSessions();setRows(result.rows);setUserId(result.userId)}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل سجل الحضور. تحقق من صلاحية Supabase.")}finally{setLoading(false)}},[]);
   useEffect(()=>{void refresh();const timer=window.setInterval(()=>void refresh(),30000);return()=>window.clearInterval(timer)},[refresh]);
   const active=useMemo(()=>rows.filter(row=>!row.ended_at),[rows]),mine=active.find(row=>row.user_id===userId);
   const toggle=async()=>{setBusy(true);setError("");setNotice("");try{if(mine)await endWorkSession();else await startWorkSession();setNotice(mine?"انتهت جلسة العمل.":"بدأت جلسة العمل.");await refresh()}catch(e){setError(e instanceof Error?e.message:"تعذر تحديث جلسة العمل.")}finally{setBusy(false)}};
