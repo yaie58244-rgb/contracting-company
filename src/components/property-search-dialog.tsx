@@ -28,7 +28,7 @@ export function PropertySearchDialog({properties,clients,remote,onClose,onOpenPr
    setLoading(true);setError("");
    const clientFilters=Object.fromEntries(Object.entries(filters).filter(([key,value])=>key!=="all"&&Boolean(value))) as Record<string,string>;
    if(filters.all&&!clientFilters.client)clientFilters.client=filters.all;
-   const requests:Promise<void>[]=[];
+   const requests:PromiseLike<void>[]=[];
    requests.push(searchClients(clientFilters).then(rows=>{if(active)setRemoteClientRows(rows)}));
    if(filters.phone.trim()){
     setPhoneClientIds([]);setPhonePropertyIds([]);
