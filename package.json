@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:verify": "node scripts/verify-migration.mjs",
     "test:import": "node scripts/test-import.mjs"
   },
   "dependencies": {
