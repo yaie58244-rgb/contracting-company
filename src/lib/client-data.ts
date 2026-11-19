@@ -73,6 +73,18 @@ export async function canViewClientPhones():Promise<boolean>{
   return !error&&Boolean((data as {phone_visible?:boolean}|null)?.phone_visible);
 }
 
+export async function fetchClientActivity(clientId:string):Promise<{claim:ClientClaim|null;comments:ClientComment[]}>{
+  const {data,error}=await createClient().rpc("get_client_activity",{p_client_ids:[clientId]});
+  if(error)throw error;
+  const rows=((data??[]) as {employee_id:string|null;employee_name:string|null;claimed_at:string|null;comment_id:string|null;comment_body:string|null;comment_author_name:string|null;comment_created_at:string|null}[]);
+  const active=rows.find(row=>row.employee_id&&row.employee_name&&row.claimed_at);
+  return {
+    claim:active?{employeeId:active.employee_id!,employeeName:active.employee_name!,claimedAt:active.claimed_at!}:null,
+    comments:rows.filter(row=>row.comment_id&&row.comment_body&&row.comment_author_name&&row.comment_created_at)
+      .map(row=>({id:row.comment_id!,body:row.comment_body!,authorName:row.comment_author_name!,createdAt:row.comment_created_at!})),
+  };
+}
+
 export async function claimClient(id:string){const {error}=await createClient().rpc("claim_client",{p_client_id:id});if(error)throw error;}
 export async function releaseClient(id:string){const {error}=await createClient().rpc("release_client_claim",{p_client_id:id});if(error)throw error;}
 export async function addClientComment(id:string,body:string){const {error}=await createClient().rpc("add_client_comment",{p_client_id:id,p_body:body});if(error)throw error;}
