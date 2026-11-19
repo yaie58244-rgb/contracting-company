@@ -17,7 +17,8 @@ const expected = {
 let bad = 0;
 for (const [table, want] of Object.entries(expected)) {
   const { n } = (await c.query(`select count(*)::int n from public.${table}`)).rows[0];
-  const ok = n === want;
+  // audit_logs keeps growing with real usage, so only a shortfall is a failure.
+  const ok = table === "audit_logs" ? n >= want : n === want;
   if (!ok) bad++;
   console.log(`${ok ? "OK  " : "FAIL"} ${table}: ${n} / ${want}`);
 }
