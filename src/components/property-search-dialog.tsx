@@ -25,14 +25,16 @@ export function PropertySearchDialog({properties,clients,remote,onClose,onOpenPr
   if(!remote)return;
   let active=true;
   const timer=window.setTimeout(()=>{
-   setLoading(true);setError("");
+   setLoading(true);setError("");setRemoteClientRows([]);setRemotePropertyRows([]);
    const clientFilters=Object.fromEntries(Object.entries(filters).filter(([key,value])=>key!=="all"&&Boolean(value))) as Record<string,string>;
    if(filters.all&&!clientFilters.client)clientFilters.client=filters.all;
    const requests:PromiseLike<void>[]=[];
-   requests.push(searchClients(clientFilters).then(rows=>{if(active)setRemoteClientRows(rows)}));
+   const clientFields=["all","client","phone","governorate","area","sector","distribution","block","details","notes"] as const;
+   if(clientFields.some(key=>Boolean(filters[key].trim())))requests.push(searchClients(clientFilters).then(rows=>{if(active)setRemoteClientRows(rows)}).catch(cause=>{if(active)setError(cause instanceof Error?`تعذر البحث في العملاء: ${cause.message}`:"تعذر البحث في العملاء.")}));
+   else setRemoteClientRows([]);
    if(filters.phone.trim()){
     setPhoneClientIds([]);setPhonePropertyIds([]);
-    requests.push(createClient().rpc("find_records_by_phone",{p_query:filters.phone}).then(async({data,error:rpcError})=>{
+    requests.push(Promise.resolve(createClient().rpc("find_records_by_phone",{p_query:filters.phone})).then(async({data,error:rpcError})=>{
      if(rpcError)throw rpcError;
      const ids=(data??[]) as {client_id:string|null;property_id:string|null}[];
      const clientIds=[...new Set(ids.flatMap(row=>row.client_id?[row.client_id]:[]))];
@@ -40,15 +42,15 @@ export function PropertySearchDialog({properties,clients,remote,onClose,onOpenPr
      if(active){setPhoneClientIds(clientIds);setPhonePropertyIds(propertyIds)}
      const rows=await searchProperties({...filters,matchingPropertyIds:propertyIds,matchingClientIds:clientIds});
      if(active)setRemotePropertyRows(rows);
-    }));
+    }).catch(cause=>{if(active)setError(cause instanceof Error?`تعذر البحث في العقارات: ${cause.message}`:"تعذر البحث في العقارات.")}));
    }else{
     setPhoneClientIds(null);setPhonePropertyIds(null);
-    requests.push(searchProperties(filters).then(rows=>{if(active)setRemotePropertyRows(rows)}));
+    requests.push(searchProperties(filters).then(rows=>{if(active)setRemotePropertyRows(rows)}).catch(cause=>{if(active)setError(cause instanceof Error?`تعذر البحث في العقارات: ${cause.message}`:"تعذر البحث في العقارات.")}));
    }
-   void Promise.all(requests).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:"تعذر تحديث نتائج البحث.")}).finally(()=>{if(active)setLoading(false)});
+   void Promise.all(requests).finally(()=>{if(active)setLoading(false)});
   },300);
   return()=>{active=false;window.clearTimeout(timer)};
- },[filters,searched,remote]); const put=(key:keyof Filters,value:string)=>{setFilters(old=>({...old,[key]:value}));setSearched(true);setError("")};
+ },[filters,searched,remote]); const put=(key:keyof Filters,value:string)=>{setFilters(old=>({...old,[key]:value}));setSearched(true);setError("");if(remote){setRemoteClientRows([]);setRemotePropertyRows([]);setPhoneClientIds(null);setPhonePropertyIds(null)}};
  const propertyRows=useMemo(()=>{if(!searched)return[];if(remote)return remotePropertyRows.filter(property=>(!phonePropertyIds&&!phoneClientIds)||Boolean(phonePropertyIds?.includes(property.id))||Boolean(phoneClientIds&&remoteClientRows.some(client=>client.name===property.client&&phoneClientIds.includes(client.id))));const f=filters;return properties.filter(p=>{const clientMatch=clientsByName.get(p.client);const address:Partial<ClientAddress>=clientMatch?.address??{};const contains=(value:string,query:string)=>!query||value.toLocaleLowerCase("ar").includes(query.trim().toLocaleLowerCase("ar"));const range=(value:number,min:string,max:string)=>!min&&!max||(value>=Number(min||0)&&value<=Number(max||Number.MAX_SAFE_INTEGER));const statusValue=({متاح:"available",مباع:"sold",مفقود:"lost"} as Record<string,string>)[f.status];const clientNotes=[clientMatch?.notes,address.governorate,address.area,address.sector,address.distribution,address.block,address.street,address.avenue,address.building,address.floor,address.apartment,address.postalCode,address.landmark].filter(Boolean).join(" ");const everyField=[p.code,p.client,p.type,p.offer,p.locationType,p.area,p.sector,p.distribution,p.block,p.plot,p.street,p.avenue,p.floor,p.buildingType,p.roomsDetails,p.details,p.sourceSearch,p.employee,p.date,p.status,p.size,p.price,...Object.values(p.sourceExcel??{}),clientNotes].filter(value=>value!==null&&value!==undefined).join(" ");return contains(everyField,f.all)&&contains(p.phones.join(" "),f.phone)&&contains(clientMatch?.phones.join(" ")??"",f.phone)&&contains(p.client,f.client)&&contains(p.code,f.code)&&contains(p.type,f.type)&&contains(p.offer,f.offer)&&contains(p.locationType,f.locationType)&&contains(p.area,f.area)&&contains(p.sector??"",f.sector)&&contains(p.distribution??"",f.distribution)&&contains(p.block,f.block)&&contains(p.plot,f.plot)&&contains(p.employee,f.employee)&&contains(`${p.details} ${p.roomsDetails??""} ${p.sourceSearch??""}`,f.details)&&contains(clientNotes,f.notes)&&range(p.size,f.sizeMin,f.sizeMax)&&(p.price===null?(!f.priceMin&&!f.priceMax):range(p.price,f.priceMin,f.priceMax))&&(!f.dateFrom||p.date>=f.dateFrom)&&(!f.dateTo||p.date<=f.dateTo)&&(!f.status||p.status===statusValue)&&(!f.governorate||contains(address.governorate??"",f.governorate))&&(!phoneClientIds||phoneClientIds.includes(p.id)||Boolean(clientMatch&&phoneClientIds.includes(clientMatch.id)))&&(!phonePropertyIds||phonePropertyIds.includes(p.id))})},[searched,filters,properties,clientsByName,phoneClientIds,phonePropertyIds,remote,remotePropertyRows,remoteClientRows]);
  const clientRows=useMemo(()=>{if(!searched)return[];if(remote)return remoteClientRows;const f=filters;if(![f.all,f.client,f.phone,f.governorate,f.area,f.sector,f.distribution,f.block,f.details,f.notes].some(Boolean))return[];return clients.filter(c=>{const a:Partial<ClientAddress>=c.address??{};const hay=[a.governorate,a.area,a.sector,a.distribution,a.block,a.street,a.avenue,a.building,a.floor,a.apartment,a.postalCode,a.landmark].join(" ");return (!f.all||`${c.name} ${c.source} ${c.notes} ${c.tags.join(" ")} ${Object.values(a).join(" ")}`.toLocaleLowerCase("ar").includes(f.all.trim().toLocaleLowerCase("ar")))&&(!f.client||c.name.toLocaleLowerCase("ar").includes(f.client.trim().toLocaleLowerCase("ar")))&&(!f.governorate||a.governorate?.includes(f.governorate))&&(!f.area||a.area?.includes(f.area))&&(!f.sector||a.sector?.includes(f.sector))&&(!f.distribution||a.distribution?.includes(f.distribution))&&(!f.block||a.block?.includes(f.block))&&(!f.details||c.notes.toLocaleLowerCase("ar").includes(f.details.toLocaleLowerCase("ar")))&&(!f.notes||hay.toLocaleLowerCase("ar").includes(f.notes.toLocaleLowerCase("ar")))&&(!f.phone||c.phones.join(" ").includes(f.phone))&&(!phoneClientIds||phoneClientIds.includes(c.id))})},[searched,filters,clients,phoneClientIds,remote,remoteClientRows]);
  const submit=(e:FormEvent)=>{e.preventDefault();setSearched(true)}; const reset=()=>{setFilters(blank);setSearched(false);setRemoteClientRows([]);setRemotePropertyRows([]);setPhoneClientIds(null);setPhonePropertyIds(null);setError("")};
