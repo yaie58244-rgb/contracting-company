@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-export const metadata: Metadata = { title:"عقار | إدارة العقارات والعملاء", description:"منصة ذكية لإدارة العقارات والعملاء في الكويت" };
+export const metadata: Metadata = { title:"البتول | إدارة العقارات والعملاء", description:"منصة ذكية لإدارة العقارات والعملاء في الكويت" };
 
 // Warm up the Supabase connection while the bundle loads so the first data
 // request does not pay for DNS and TLS handshakes.

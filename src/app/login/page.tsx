@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Building2, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -51,12 +51,12 @@ export default function LoginPage() {
     <div className="pointer-events-none absolute -bottom-24 -left-20 h-96 w-96 rounded-full bg-violet-300/20 blur-3xl" />
     <section className="glass panel relative grid w-full max-w-4xl overflow-hidden md:grid-cols-2">
       <div className="hidden min-h-[560px] flex-col justify-between bg-gradient-to-br from-[#14273d] via-[#152d42] to-[#245d63] p-10 text-white md:flex">
-        <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10"><Building2 size={23}/></div><div><b className="text-xl">عقار</b><div className="text-[10px] tracking-[.2em] text-white/55">AQAR · KUWAIT</div></div></div>
+        <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-white p-1.5"><img src="/brand/albatoul-mark.png" alt="شعار البتول" className="h-full w-full object-contain"/></div><div><b className="text-xl">شركة البتول</b><div className="text-[10px] tracking-[.14em] text-white/55">AL-BATOUL REAL ESTATE</div></div></div>
         <div><div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] text-teal-100"><ShieldCheck size={14}/> مساحة عمل آمنة</div><h1 className="text-3xl font-black leading-[1.55]">كل عقاراتك<br/>وعلاقاتك في مكان واحد.</h1><p className="mt-4 max-w-xs text-sm leading-7 text-white/65">منصة موحدة لفريقك لإدارة العقارات والعملاء والمتابعات بكل سهولة.</p></div>
         <div className="text-xs text-white/45">حلول ذكية لإدارة العقارات في الكويت</div>
       </div>
       <div className="flex flex-col justify-center p-7 sm:p-10">
-        <div className="mb-8 md:hidden"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-teal-500 text-white"><Building2 size={23}/></div><div className="text-center text-lg font-black">عقار</div></div>
+        <div className="mb-8 md:hidden"><img src="/brand/albatoul-logo.png" alt="شركة البتول لأعمال السمسرة العقارية" className="mx-auto h-32 w-auto object-contain"/></div>
         <div className="mb-7"><div className="mb-2 text-xs font-bold text-teal-600">مرحباً بعودتك</div><h2 className="text-2xl font-black">تسجيل الدخول</h2><p className="mt-2 text-xs text-slate-400">أدخل بيانات حسابك للوصول إلى مساحة العمل.</p></div>
         <form onSubmit={submit} className="space-y-4">
           <label className="block"><span className="mb-1.5 block text-xs font-bold">اسم المستخدم</span><span className="relative block"><UserRound size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={e=>setUsername(e.target.value)} placeholder="اسم المستخدم" dir="auto" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/></span></label>
