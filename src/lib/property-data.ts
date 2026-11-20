@@ -41,10 +41,8 @@ async function hydrateProperties(rows:PropertyRow[],clientRecords?:ClientRecord[
   return rows.map(row=>{const sourceExcel=row.source_excel??{};const sourceSearch=Object.values(sourceExcel).filter(value=>value!==null&&value!==undefined&&!String(value).startsWith("محفوظ ضمن بيانات التواصل")).join(" ");return {id:row.id,code:row.code,client:row.client_id?(clients.get(row.client_id)??"عميل غير معروف"):"غير مسجل",phones:[],type:row.type_id?(lookups.get(row.type_id)??"غير محدد"):"غير محدد",offer:row.offer_type_id?(lookups.get(row.offer_type_id)??"—"):"—",area:row.area_id?(lookups.get(row.area_id)??"غير محدد"):"غير محدد",sector:row.sector??"",distribution:row.distribution??"",block:row.block??"",plot:row.plot??"",street:row.street??"",avenue:row.avenue??"",floor:row.floor??"",buildingType:row.building_type??"",roomsDetails:row.rooms_details??"",sourceExcel,sourceSearch,locationType:row.location_type_id?(lookups.get(row.location_type_id)??""):"",size:Number(row.area_m2??0),price:row.asking_price_kwd===null?null:Number(row.asking_price_kwd),employee:row.assigned_to?(employees.get(row.assigned_to)??"غير معيّن"):"غير معيّن",status:row.status,date:row.entry_date,details:row.details??"",hasMap:row.has_map,hasContact:row.has_contact,hasLocation:row.has_location,lastContactAt:row.last_contact_at,latitude:row.latitude===null?null:Number(row.latitude),longitude:row.longitude===null?null:Number(row.longitude)}});
 }
 
-export async function searchProperties(filters:Record<string,unknown>):Promise<Property[]> {
-  const {data,error}=await createClient().rpc("search_properties",{p_filters:filters});
-  if(error)throw error;
-  return ((data??[]) as SearchPropertyRow[]).map(row=>({
+function mapSearchRow(row:SearchPropertyRow):Property{
+  return {
     id:row.id,code:row.code,client:row.client,phones:row.phones??[],type:row.type,offer:row.offer,
     area:row.area,sector:row.sector,distribution:row.distribution,block:row.block,plot:row.plot,
     street:row.street,avenue:row.avenue,floor:row.floor,buildingType:row.building_type,
@@ -53,7 +51,21 @@ export async function searchProperties(filters:Record<string,unknown>):Promise<P
     employee:row.employee,status:row.status,date:row.date,details:row.details,
     latitude:row.latitude===null?null:Number(row.latitude),longitude:row.longitude===null?null:Number(row.longitude),
     hasMap:row.has_map,hasContact:row.has_contact,hasLocation:row.has_location,lastContactAt:row.last_contact_at,
-  }));
+  };
+}
+
+export async function searchProperties(filters:Record<string,unknown>):Promise<Property[]> {
+  const {data,error}=await createClient().rpc("search_properties",{p_filters:filters});
+  if(error)throw error;
+  return ((data??[]) as SearchPropertyRow[]).map(mapSearchRow);
+}
+
+/** Every match, a page at a time; `total` is the full number of matching properties. */
+export async function searchPropertiesPage(filters:Record<string,unknown>,offset=0,limit=200):Promise<{rows:Property[];total:number}>{
+  const {data,error}=await createClient().rpc("search_properties_page",{p_filters:filters,p_offset:offset,p_limit:limit});
+  if(error)throw error;
+  const rows=(data??[]) as (SearchPropertyRow&{total_count:number|string})[];
+  return {rows:rows.map(mapSearchRow),total:rows.length?Number(rows[0].total_count):0};
 }
 
 export async function revealPropertyContact(id:string,comment:string):Promise<string[]> {
