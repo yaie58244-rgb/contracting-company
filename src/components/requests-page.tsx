@@ -3,9 +3,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ClipboardList, LoaderCircle, Plus, Search, X, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import type { ClientRecord } from "@/lib/client-data";
+import { codeValues, useCodeLists } from "@/lib/code-lists";
 import { createRequest, fetchRequestMatches, fetchRequests, updateRequestStatus, type PropertyRequest, type RequestMatch } from "@/lib/request-data";
 
-const types=["أي نوع","أرض","بيت","شقة","تجاري"],areas=["أي منطقة","الأندلس","الروضة","صباح الأحمد","السليبخات","العارضية","شرق","السالمية","حولي","الفروانية","الجابرية"];
+const defaultTypes=["أرض","بيت","شقة","تجاري"],defaultAreas=["الأندلس","الروضة","صباح الأحمد","السليبخات","العارضية","شرق","السالمية","حولي","الفروانية","الجابرية"];
 export function RequestsPage({clients,remote}:{clients:ClientRecord[];remote:boolean}){
  const [rows,setRows]=useState<PropertyRequest[]>([]),[loading,setLoading]=useState(remote),[open,setOpen]=useState(false),[query,setQuery]=useState(""),[error,setError]=useState(""),[expanded,setExpanded]=useState<string|null>(null),[matches,setMatches]=useState<Record<string,RequestMatch[]>>({}),[matching,setMatching]=useState<string|null>(null);
  const refresh=async()=>{if(!remote)return;setLoading(true);try{setRows(await fetchRequests());setError("")}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل الطلبات. تحقق من ترحيل Supabase رقم 009 وصلاحيات الطلبات.")}finally{setLoading(false)}};
@@ -20,6 +21,7 @@ export function RequestsPage({clients,remote}:{clients:ClientRecord[];remote:boo
 }
 function Range({label,min,max,unit}:{label:string;min:number|null;max:number|null;unit:string}){return <div className="rounded-lg bg-white/55 p-2 dark:bg-slate-800/50"><div className="text-slate-400">{label}</div><b className="mt-1 block">{min??"—"} إلى {max??"—"} {unit}</b></div>}
 function RequestDialog({clients,onClose,onSave}:{clients:ClientRecord[];onClose:()=>void;onSave:(input:Parameters<typeof createRequest>[0])=>void}){
+ const codes=useCodeLists();const types=["أي نوع",...codeValues(codes,"property_type",defaultTypes)],areas=["أي منطقة",...codeValues(codes,"area",defaultAreas)];
  const [form,setForm]=useState({clientId:clients[0]?.id??"",type:"أي نوع",area:"أي منطقة",minSize:"",maxSize:"",minPrice:"",maxPrice:"",notes:""});
  const update=(key:keyof typeof form,value:string)=>setForm(old=>({...old,[key]:value}));const input="focus-ring mt-1 h-10 w-full rounded-xl border border-slate-200/80 bg-white/55 px-3 text-xs outline-none dark:border-slate-700 dark:bg-slate-900/50";
  const submit=(e:FormEvent)=>{e.preventDefault();if(form.minSize&&form.maxSize&&Number(form.minSize)>Number(form.maxSize))return;if(form.minPrice&&form.maxPrice&&Number(form.minPrice)>Number(form.maxPrice))return;onSave(form)};

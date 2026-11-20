@@ -119,19 +119,6 @@ export async function addPropertyComment(id:string,body:string){
   if(error)throw error;
 }
 
-export type LookupLists={property_type:string[];offer_type:string[];location_type:string[];area:string[]};
-let lookupCache:Promise<LookupLists>|null=null;
-export function fetchLookupLists():Promise<LookupLists>{
-  lookupCache??=(async()=>{
-    const {data,error}=await createClient().from("lookups").select("type,name_ar,code").eq("is_active",true).order("code");
-    if(error){lookupCache=null;throw error}
-    const lists:LookupLists={property_type:[],offer_type:[],location_type:[],area:[]};
-    for(const row of (data??[]) as {type:string;name_ar:string}[])if(row.type in lists)lists[row.type as keyof LookupLists].push(row.name_ar);
-    return lists;
-  })();
-  return lookupCache;
-}
-
 export type ExportRow={code:string;client:string;phone_1:string|null;phone_2:string|null;phone_3:string|null;type:string;offer:string;area:string;sector:string;distribution:string;block:string;plot:string;street:string;avenue:string;location_type:string;annexes:string;size:number|null;price:number|null;status:string;employee:string;entry_date:string;details:string;latitude:number|null;longitude:number|null};
 export async function fetchExportRows(onProgress?:(loaded:number)=>void):Promise<ExportRow[]>{
   const db=createClient();const rows:ExportRow[]=[];const pageSize=1000;

@@ -1,12 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Building2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { Building2, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { marketerEmail } from "@/lib/marketer-auth";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -18,9 +17,11 @@ export default function LoginPage() {
     setBusy(true); setError(""); setMessage("");
     try {
       const neon = createClient();
-      // Marketers type their name instead of an email address.
-      const login = email.includes("@") ? email.trim() : await marketerEmail(email);
-      const { error: authError } = await neon.auth.signInWithPassword({ email: login, password });
+      // The server resolves the username to the account and returns a session.
+      const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: username.trim(), password }) });
+      const result = await response.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; error?: string };
+      if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(result.error ?? "login failed");
+      const { error: authError } = await neon.auth.setSession({ access_token: result.access_token, refresh_token: result.refresh_token });
       if (authError) throw authError;
       // The workspace repairs the profile right after the redirect, so a failed
       // bootstrap must not block an otherwise valid sign-in.
@@ -29,17 +30,17 @@ export default function LoginPage() {
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.assign(next?.startsWith("/") ? next : "/");
     } catch (e) {
-      setError(e instanceof Error && e.message.includes("Supabase is not configured. أضف NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_ANON_KEY.") ? "لم يتم إعداد Supabase بعد." : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني أو اسم المسوق وكلمة المرور.");
+      setError(e instanceof Error && e.message.includes("Supabase is not configured. أضف NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_ANON_KEY.") ? "لم يتم إعداد Supabase بعد." : "تعذر تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور.");
     } finally { setBusy(false); }
   };
 
   const forgotPassword = async () => {
     setError(""); setMessage("");
-    if (!email.trim()) { setError("أدخل بريدك الإلكتروني أولاً لإرسال رابط الاستعادة."); return; }
-    if (!email.includes("@")) { setError("حسابات المسوقين تُعاد كلمة مرورها من مدير النظام."); return; }
+    // Username accounts have no mailbox: the admin resets their password.
+    if (!username.includes("@")) { setMessage("تواصل مع مدير النظام لإعادة تعيين كلمة المرور من صفحة الموظفين."); return; }
     try {
       const neon = createClient();
-      const { error: resetError } = await neon.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/login` });
+      const { error: resetError } = await neon.auth.resetPasswordForEmail(username.trim(), { redirectTo: `${window.location.origin}/login` });
       if (resetError) throw resetError;
       setMessage("إذا كان البريد مسجلاً، فسيصلك رابط إعادة تعيين كلمة المرور.");
     } catch { setError("تعذر إرسال رابط الاستعادة. تحقق من إعداد البريد في Supabase Auth."); }
@@ -58,7 +59,7 @@ export default function LoginPage() {
         <div className="mb-8 md:hidden"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-teal-500 text-white"><Building2 size={23}/></div><div className="text-center text-lg font-black">عقار</div></div>
         <div className="mb-7"><div className="mb-2 text-xs font-bold text-teal-600">مرحباً بعودتك</div><h2 className="text-2xl font-black">تسجيل الدخول</h2><p className="mt-2 text-xs text-slate-400">أدخل بيانات حسابك للوصول إلى مساحة العمل.</p></div>
         <form onSubmit={submit} className="space-y-4">
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">البريد الإلكتروني أو اسم المسوق</span><span className="relative block"><Mail size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required type="text" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com أو اسم المسوق" dir="auto" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/></span></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">اسم المستخدم</span><span className="relative block"><UserRound size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={e=>setUsername(e.target.value)} placeholder="اسم المستخدم" dir="auto" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/></span></label>
           <label className="block"><span className="mb-1.5 block text-xs font-bold">كلمة المرور</span><span className="relative block"><LockKeyhole size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required minLength={6} type={showPassword?"text":"password"} autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••••" dir="ltr" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-10 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/><button type="button" aria-label={showPassword?"إخفاء كلمة المرور":"إظهار كلمة المرور"} onClick={()=>setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></span></label>
           {error&&<p role="alert" className="rounded-xl bg-rose-50 px-3 py-2.5 text-xs text-rose-700">{error}</p>}{message&&<p role="status" className="rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700">{message}</p>}
           <button disabled={busy} className="focus-ring h-11 w-full rounded-xl bg-teal-500 text-sm font-bold text-white shadow-lg shadow-teal-500/20 transition hover:bg-teal-600 disabled:opacity-60">{busy?"جارٍ التحقق…":"دخول إلى النظام"}</button>

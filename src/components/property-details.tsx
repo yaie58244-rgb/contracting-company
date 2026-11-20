@@ -3,12 +3,15 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { motion } from "framer-motion";
 import { Archive, ArrowRight, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, X } from "lucide-react";
 import type { Property } from "@/lib/types";
-import { addPropertyComment, fetchLookupLists, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type LookupLists, type PropertyComment, type PropertyFilePatch } from "@/lib/property-data";
+import { addPropertyComment, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch } from "@/lib/property-data";
+import { codeValues, useCodeLists } from "@/lib/code-lists";
+import { CodedInput } from "@/components/coded-input";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/company-profile-data";
 import { dialable } from "@/lib/phone-format";
 import { digits } from "@/lib/utils";
 
-const fallbackLookups: LookupLists = {
+// Built-in values, used until the admin codes these fields in Settings.
+const fallbackLookups: Record<"property_type" | "offer_type" | "location_type" | "area", string[]> = {
   property_type: ["بيت", "أرض", "شقة", "عمارة", "شاليه", "محل"],
   offer_type: ["للبيع", "للإيجار", "للبدل", "مطلوب شراء"],
   location_type: ["شارع واحد", "شارعين", "ثلاث شوارع", "أربع شوارع", "زاوية شارعين", "بطن وظهر", "ثلاث جهات"],
@@ -48,7 +51,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [annexes, setAnnexes] = useState(property.annexes ?? "");
   const [canEdit, setCanEdit] = useState(!remote);
   const [fileLoading, setFileLoading] = useState(remote);
-  const [lookups, setLookups] = useState<LookupLists>(fallbackLookups);
+  const codes = useCodeLists();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Form>(() => formFrom(property, property.phones, property.annexes ?? ""));
   const [saving, setSaving] = useState(false);
@@ -88,11 +91,10 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   useEffect(() => {
     if (!remote) { setImages(property.imageData ? [{ storage_path: property.imageData, caption: "صورة العقار" }] : []); return; }
     let active = true;
-    void Promise.allSettled([fetchCompanyProfile(), fetchPropertyImages(property.id), fetchLookupLists()]).then(([profile, photos, lists]) => {
+    void Promise.allSettled([fetchCompanyProfile(), fetchPropertyImages(property.id)]).then(([profile, photos]) => {
       if (!active) return;
       if (profile.status === "fulfilled") setCompany(profile.value);
       if (photos.status === "fulfilled") setImages(photos.value);
-      if (lists.status === "fulfilled") setLookups({ property_type: lists.value.property_type.length ? lists.value.property_type : fallbackLookups.property_type, offer_type: lists.value.offer_type.length ? lists.value.offer_type : fallbackLookups.offer_type, location_type: lists.value.location_type.length ? lists.value.location_type : fallbackLookups.location_type, area: lists.value.area.length ? lists.value.area : fallbackLookups.area });
     });
     return () => { active = false; };
   }, [remote, property.id, property.imageData]);
@@ -144,8 +146,10 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const options = (list: string[], current: string) => current && !list.includes(current) ? [current, ...list] : list;
   const set = (key: keyof Form) => (value: string) => setForm(old => ({ ...old, [key]: value }));
 
-  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel" }) =>
-    <Field label={label}>{editing ? <input value={form[key]} onChange={e => set(key)(e.target.value)} dir={extra?.dir} inputMode={extra?.inputMode} className={inputClass}/> : <Value>{value || "—"}</Value>}</Field>;
+  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel"; field?: string }) =>
+    <Field label={label}>{editing ? (extra?.field
+      ? <CodedInput field={extra.field} lists={codes} value={form[key]} onChange={set(key)} className={inputClass} inputProps={{ dir: extra.dir, inputMode: extra.inputMode }}/>
+      : <input value={form[key]} onChange={e => set(key)(e.target.value)} dir={extra?.dir} inputMode={extra?.inputMode} className={inputClass}/>) : <Value>{value || "—"}</Value>}</Field>;
   const select = (key: keyof Form, label: string, list: string[], value: string) =>
     <Field label={label}>{editing ? <select value={form[key]} onChange={e => set(key)(e.target.value)} className={inputClass}><option value="">—</option>{options(list, form[key]).map(x => <option key={x}>{x}</option>)}</select> : <Value>{value || "—"}</Value>}</Field>;
 
@@ -171,7 +175,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
             <Box title="اسم العميل">{editing ? <input value={form.client} onChange={e => set("client")(e.target.value)} className={inputClass}/> : <div className="text-lg font-black">{property.client}</div>}</Box>
             <Box title="نوع الموقع">
               <select value={editing ? form.locationType : property.locationType} disabled={!canEdit || saving} onChange={e => editing ? set("locationType")(e.target.value) : quickSave({ locationType: e.target.value })} className={inputClass}>
-                <option value="">اختر نوع الموقع</option>{options(lookups.location_type, editing ? form.locationType : property.locationType).map(x => <option key={x}>{x}</option>)}
+                <option value="">اختر نوع الموقع</option>{options(codeValues(codes, "location_type", fallbackLookups.location_type), editing ? form.locationType : property.locationType).map(x => <option key={x}>{x}</option>)}
               </select>
               {!canEdit && <p className="mt-1.5 text-[10px] text-slate-400">التعديل متاح لمن لديه صلاحية تعديل العقارات.</p>}
             </Box>
@@ -191,16 +195,16 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
         {/* Grid from the sketch */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {select("offer", "نوع العرض", lookups.offer_type, property.offer === "—" ? "" : property.offer)}
-          {select("area", "المنطقة", lookups.area, property.area === "غير محدد" ? "" : property.area)}
-          {text("block", "القطعة", property.block)}
-          {text("street", "الشارع", property.street)}
-          {text("plot", "القسيمة", property.plot)}
-          {text("annexes", "التوابع", annexes)}
+          {select("offer", "نوع العرض", codeValues(codes, "offer_type", fallbackLookups.offer_type), property.offer === "—" ? "" : property.offer)}
+          {select("area", "المنطقة", codeValues(codes, "area", fallbackLookups.area), property.area === "غير محدد" ? "" : property.area)}
+          {text("block", "القطعة", property.block, { field: "block" })}
+          {text("street", "الشارع", property.street, { field: "street" })}
+          {text("plot", "القسيمة", property.plot, { field: "plot" })}
+          {text("annexes", "التوابع", annexes, { field: "annexes" })}
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {select("type", "نوع العقار", lookups.property_type, property.type === "غير محدد" ? "" : property.type)}
+          {select("type", "نوع العقار", codeValues(codes, "property_type", fallbackLookups.property_type), property.type === "غير محدد" ? "" : property.type)}
           {text("size", "المساحة م²", property.size ? property.size.toLocaleString("en-US") : "", { inputMode: "decimal" })}
           {text("price", "السعر د.ك", property.price === null ? "مخفي" : property.price.toLocaleString("en-US"), { inputMode: "decimal" })}
           <Field label="الحالة"><select value={editing ? form.status : property.status} disabled={!canEdit || saving} onChange={e => editing ? set("status")(e.target.value) : quickSave({ status: e.target.value as Property["status"] })} className={inputClass}><option value="available">متاح</option><option value="sold">مباع</option><option value="lost">مفقود</option></select></Field>
