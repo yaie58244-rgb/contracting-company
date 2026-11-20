@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Archive, ArrowRight, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, X } from "lucide-react";
+import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, X } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { addPropertyComment, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch } from "@/lib/property-data";
 import { codeValues, useCodeLists } from "@/lib/code-lists";
@@ -62,6 +62,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  const [allComments, setAllComments] = useState(false);
   const [images, setImages] = useState<{ storage_path: string; caption: string | null }[]>([]);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -215,15 +216,20 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
         {/* Comments with date and marketer name */}
         <section className="rounded-2xl border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-teal-600"/>التعليقات</div><span className="text-[10px] text-slate-400">{comments.length.toLocaleString("ar-KW")} تعليق</span></div>
-          <div className="max-h-72 overflow-y-auto">
+          {/* The two newest comments stay visible; the rest open from the arrow under them. */}
+          <div className={allComments ? "max-h-96 overflow-y-auto" : ""}>
             <table className="w-full text-right text-xs">
               <thead className="sticky top-0 bg-slate-50 text-[10px] text-slate-500 dark:bg-slate-900"><tr><th className="w-36 px-4 py-2.5 font-bold">اسم المسوق</th><th className="w-32 px-4 py-2.5 font-bold">التاريخ</th><th className="px-4 py-2.5 font-bold">التعليق</th></tr></thead>
               <tbody>
-                {comments.map(comment => <tr key={comment.id} className="border-t border-slate-100 align-top dark:border-slate-800"><td className="px-4 py-2.5 font-bold">{comment.authorName}</td><td className="px-4 py-2.5 tabular-nums text-slate-500"><div>{dateFormat.format(new Date(comment.createdAt))}</div><div className="text-[10px] text-slate-400">{timeFormat.format(new Date(comment.createdAt))}</div></td><td className="whitespace-pre-wrap px-4 py-2.5 leading-6">{comment.body}</td></tr>)}
+                {(allComments ? comments : comments.slice(0, VISIBLE_COMMENTS)).map(comment => <tr key={comment.id} className="border-t border-slate-100 align-top dark:border-slate-800"><td className="px-4 py-2.5 font-bold">{comment.authorName}</td><td className="px-4 py-2.5 tabular-nums text-slate-500"><div>{dateFormat.format(new Date(comment.createdAt))}</div><div className="text-[10px] text-slate-400">{timeFormat.format(new Date(comment.createdAt))}</div></td><td className="whitespace-pre-wrap px-4 py-2.5 leading-6">{comment.body}</td></tr>)}
                 {!comments.length && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">{commentsLoading ? "جارٍ تحميل التعليقات…" : "لا توجد تعليقات على هذا العقار بعد."}</td></tr>}
               </tbody>
             </table>
           </div>
+          {comments.length > VISIBLE_COMMENTS && <button type="button" onClick={() => setAllComments(value => !value)} aria-expanded={allComments} className="flex w-full items-center justify-center gap-1.5 border-t border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-teal-300 dark:hover:bg-slate-900">
+            {allComments ? "إخفاء التعليقات الأقدم" : `عرض كل التعليقات (${comments.length.toLocaleString("ar-KW")})`}
+            <ChevronDown size={15} className={`transition-transform ${allComments ? "rotate-180" : ""}`}/>
+          </button>}
           <div className="flex gap-2 border-t border-slate-200 p-3 dark:border-slate-700"><textarea value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void postComment(); }} rows={2} maxLength={2000} placeholder="اكتب تعليقًا… سيُحفظ باسمك وتاريخ اليوم" className={`${inputClass} mt-0 h-auto flex-1 py-2`}/><button disabled={postingComment || newComment.trim().length < 2} onClick={() => void postComment()} className="flex items-center gap-1.5 self-end rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">{postingComment ? <LoaderCircle size={14} className="animate-spin"/> : <Send size={14}/>}إضافة</button></div>
           {commentError && <p role="alert" className="px-4 pb-3 text-[11px] text-rose-600">{commentError}</p>}
         </section>
@@ -242,6 +248,8 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   </motion.div>;
 }
 
+/** Comments shown before the "show all" arrow. */
+const VISIBLE_COMMENTS = 2;
 const inputClass = "focus-ring mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900";
 
 function Box({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
