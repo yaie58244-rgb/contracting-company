@@ -13,6 +13,17 @@ async function fetchAll<T>(query:(from:number,to:number)=>any,maxRows=Number.POS
 export async function fetchProperties(clientRecords?:ClientRecord[],maxRows=50,offset=0): Promise<Property[]> {
   const db=createClient();
   const rows=await fetchAll<PropertyRow>((from,to)=>db.from("properties_safe").select("*").order("entry_date",{ascending:false}).order("id",{ascending:true}).range(from,to),maxRows,offset);
+  return hydrateProperties(rows,clientRecords);
+}
+
+export async function fetchPropertyById(id:string):Promise<Property|null>{
+  const {data,error}=await createClient().from("properties_safe").select("*").eq("id",id).limit(1);
+  if(error)throw error;
+  return (await hydrateProperties((data??[]) as PropertyRow[]))[0]??null;
+}
+
+async function hydrateProperties(rows:PropertyRow[],clientRecords?:ClientRecord[]):Promise<Property[]>{
+  const db=createClient();
   if(!rows.length) return [];
   const knownClients=new Map((clientRecords??[]).map(({id,name})=>[id,name]));
   const missingClientIds=[...new Set(rows.flatMap(row=>row.client_id&&!knownClients.has(row.client_id)?[row.client_id]:[]))];
@@ -70,3 +81,52 @@ export async function updatePropertyLocation(id:string,location:{area:string;sec
 export async function fetchFavoriteIds():Promise<string[]>{const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const {data,error}=await db.from("favorites").select("property_id").eq("user_id",user.id);if(error)throw error;return ((data??[]) as {property_id:string}[]).map(row=>row.property_id);}
 
 export async function setFavorite(id:string,shouldFavorite:boolean){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const result=shouldFavorite?await db.from("favorites").insert({user_id:user.id,property_id:id}):await db.from("favorites").delete().eq("user_id",user.id).eq("property_id",id);if(result.error)throw result.error;}
+
+export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean};
+export async function fetchPropertyFile(id:string):Promise<PropertyFileExtras>{
+  const {data,error}=await createClient().rpc("get_property_file",{p_property_id:id});
+  if(error)throw error;
+  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean}[])[0];
+  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit)};
+}
+
+export type PropertyFilePatch={client?:string;phones?:string[];type?:string;offer?:string;area?:string;locationType?:string;block?:string;plot?:string;street?:string;avenue?:string;sector?:string;distribution?:string;annexes?:string;details?:string;size?:string;price?:string;status?:Property["status"];latitude?:string;longitude?:string};
+export async function updatePropertyFile(id:string,patch:PropertyFilePatch){
+  const {error}=await createClient().rpc("update_property_file",{p_property_id:id,p_data:patch});
+  if(error)throw error;
+}
+
+export type PropertyComment={id:string;body:string;authorName:string;createdAt:string};
+export async function fetchPropertyComments(id:string):Promise<PropertyComment[]>{
+  const {data,error}=await createClient().rpc("list_property_comments",{p_property_id:id});
+  if(error)throw error;
+  return ((data??[]) as {id:string;body:string;author_name:string;created_at:string}[]).map(row=>({id:row.id,body:row.body,authorName:row.author_name,createdAt:row.created_at}));
+}
+export async function addPropertyComment(id:string,body:string){
+  const {error}=await createClient().rpc("add_property_comment",{p_property_id:id,p_body:body});
+  if(error)throw error;
+}
+
+export type LookupLists={property_type:string[];offer_type:string[];location_type:string[];area:string[]};
+let lookupCache:Promise<LookupLists>|null=null;
+export function fetchLookupLists():Promise<LookupLists>{
+  lookupCache??=(async()=>{
+    const {data,error}=await createClient().from("lookups").select("type,name_ar,code").eq("is_active",true).order("code");
+    if(error){lookupCache=null;throw error}
+    const lists:LookupLists={property_type:[],offer_type:[],location_type:[],area:[]};
+    for(const row of (data??[]) as {type:string;name_ar:string}[])if(row.type in lists)lists[row.type as keyof LookupLists].push(row.name_ar);
+    return lists;
+  })();
+  return lookupCache;
+}
+
+export type ExportRow={code:string;client:string;phone_1:string|null;phone_2:string|null;phone_3:string|null;type:string;offer:string;area:string;sector:string;distribution:string;block:string;plot:string;street:string;avenue:string;location_type:string;annexes:string;size:number|null;price:number|null;status:string;employee:string;entry_date:string;details:string;latitude:number|null;longitude:number|null};
+export async function fetchExportRows(onProgress?:(loaded:number)=>void):Promise<ExportRow[]>{
+  const db=createClient();const rows:ExportRow[]=[];const pageSize=1000;
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await db.rpc("export_properties",{p_offset:offset,p_limit:pageSize});
+    if(error)throw error;
+    const page=(data??[]) as ExportRow[];rows.push(...page);onProgress?.(rows.length);
+    if(page.length<pageSize)return rows;
+  }
+}
