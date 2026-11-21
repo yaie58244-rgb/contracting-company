@@ -136,7 +136,7 @@ export async function addPropertyComment(id:string,body:string){
   if(error)throw error;
 }
 
-export type ExportRow={code:string;client:string;phone_1:string|null;phone_2:string|null;phone_3:string|null;type:string;offer:string;area:string;sector:string;distribution:string;block:string;plot:string;street:string;avenue:string;location_type:string;annexes:string;size:number|null;price:number|null;status:string;employee:string;entry_date:string;details:string;latitude:number|null;longitude:number|null};
+export type ExportRow={code:string;client:string;phone_1:string|null;phone_2:string|null;phone_3:string|null;type:string;offer:string;area:string;sector:string;distribution:string;block:string;plot:string;street:string;avenue:string;location_type:string;annexes:string;size:number|null;price:number|null;status:string;employee:string;entry_date:string;details:string;latitude:number|null;longitude:number|null;comments:string};
 export async function fetchExportRows(onProgress?:(loaded:number)=>void):Promise<ExportRow[]>{
   const db=createClient();const rows:ExportRow[]=[];const pageSize=1000;
   for(let offset=0;;offset+=pageSize){

@@ -5,7 +5,10 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, KeyRound, LoaderCircle, Plus, UserRound, Users, X } from "lucide-react";
 import { isMarketerEmail } from "@/lib/marketer-auth";
 import { employeeRequest, fetchEmployees, updateEmployee, type EmployeeRecord } from "@/lib/employee-data";
-import { PROPERTY_EDIT_SCOPES, propertyEditScopeLabels, propertyEditScopeShort, type PropertyEditScope } from "@/lib/property-data";
+import { PROPERTY_EDIT_SCOPES as ALL_EDIT_SCOPES, propertyEditScopeLabels, propertyEditScopeShort, type PropertyEditScope } from "@/lib/property-data";
+
+// The property file has no map any more, so there is nothing to allow there.
+const PROPERTY_EDIT_SCOPES = ALL_EDIT_SCOPES.filter(scope => scope !== "map");
 import { fetchRoleMatrix, type RoleRecord } from "@/lib/role-data";
 import { usernameError } from "@/lib/username";
 
@@ -114,9 +117,9 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
   };
   // Summary in the table; the button opens the checkboxes.
   const editCell = (person: EmployeeRecord) => {
-    const custom = person.property_edit_scopes;
+    const custom = Array.isArray(person.property_edit_scopes) ? person.property_edit_scopes.filter(x => x !== "map") : person.property_edit_scopes;
     const summary = !Array.isArray(custom) ? `حسب الدور (${roleAllowsEdit(person) ? "كل حاجة" : "ممنوع"})`
-      : !custom.length ? "ممنوع" : custom.length === PROPERTY_EDIT_SCOPES.length ? "كل حاجة"
+      : !custom.length ? "ممنوع" : PROPERTY_EDIT_SCOPES.every(x => custom.includes(x)) ? "كل حاجة"
       : custom.map(x => propertyEditScopeShort[x as PropertyEditScope] ?? x).join("، ");
     const tone = !Array.isArray(custom) ? "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300" : !custom.length ? "border-rose-200 bg-rose-50 text-rose-700" : "border-teal-300 bg-teal-50 text-teal-700";
     return <button type="button" onClick={() => openScopes(person)} title="اختار الموظف يعدّل إيه في ملف العقار" className={`max-w-56 truncate rounded-lg border px-2.5 py-1.5 text-[10px] font-bold ${tone}`}>{summary}</button>;

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
+import { ArrowDownUp, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { PROPERTY_EDIT_SCOPES, addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyEditScope, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
 import { codeValues, useCodeLists } from "@/lib/code-lists";
@@ -47,15 +47,15 @@ function readLocalComments(id: string): PropertyComment[] {
   try { return JSON.parse(localStorage.getItem(`aqar-property-comments-${id}`) ?? "[]") as PropertyComment[]; } catch { return []; }
 }
 
-export function PropertyDetails({ property, favorite, remote, navigationIds = [property.id], backLabel, onClose, onNavigate, onFavorite, onArchive, onSave }: { property: Property; favorite: boolean; remote: boolean; navigationIds?: string[]; backLabel?: string; onClose: () => void; onNavigate?: (id: string) => void; onFavorite: () => void; onArchive: (comment: string) => void; onSave: (patch: PropertyFilePatch) => Promise<void> }) {
+export function PropertyDetails({ property, favorite, remote, navigationIds = [property.id], backLabel, reversed = false, onClose, onNavigate, onReverse, onFavorite, onSave }: { property: Property; favorite: boolean; remote: boolean; navigationIds?: string[]; backLabel?: string; reversed?: boolean; onClose: () => void; onNavigate?: (id: string) => void; onReverse?: () => void; onFavorite: () => void; onSave: (patch: PropertyFilePatch) => Promise<void> }) {
   const [phones, setPhones] = useState<string[]>(property.phones);
   const [phonesVisible, setPhonesVisible] = useState(!remote);
   const [annexes, setAnnexes] = useState(property.annexes ?? "");
-  const [fileSource, setFileSource] = useState<{ id: string; data: Record<string, unknown>; enteredBy: string } | null>(null);
+  const [fileSource, setFileSource] = useState<{ id: string; enteredBy: string } | null>(null);
   const [scopes, setScopes] = useState<string[]>(remote ? [] : [...PROPERTY_EDIT_SCOPES]);
   const may = (scope: PropertyEditScope) => scopes.includes(scope);
   const canEdit = scopes.length > 0;
-  // Map, status and site type save on their own; the rest needs the edit mode.
+  // Status and site type save on their own; the rest needs the edit mode.
   const usesEditMode = may("info") || may("price") || may("phones");
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
@@ -64,7 +64,6 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [form, setForm] = useState<Form>(() => formFrom(property, property.phones, property.annexes ?? ""));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [mapInput, setMapInput] = useState("");
   const [comments, setComments] = useState<PropertyComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(remote);
   const [newComment, setNewComment] = useState("");
@@ -75,15 +74,13 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [imageBusy, setImageBusy] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const [archiveComment, setArchiveComment] = useState("");
 
   const loadFile = useCallback(async () => {
     if (!remote) return;
     setFileLoading(true);
     try {
       const file = await fetchPropertyFile(property.id);
-      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setScopes(file.editScopes); setFileSource({ id: property.id, data: file.sourceExcel ?? {}, enteredBy: file.enteredByName });
+      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setScopes(file.editScopes); setFileSource({ id: property.id, enteredBy: file.enteredByName });
     } catch (cause) {
       setError(cause instanceof Error ? `تعذر تحميل بيانات الملف: ${cause.message}` : "تعذر تحميل بيانات الملف.");
     } finally { setFileLoading(false); }
@@ -153,13 +150,6 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
   const quickSave = (patch: PropertyFilePatch) => { void save(patch); };
 
-  const saveMap = async () => {
-    if (!mapInput.trim()) { await save({ latitude: "", longitude: "" }); return; }
-    const point = parseMapInput(mapInput);
-    if (!point) { setError("الصق رابط Google Maps الكامل أو اكتب الإحداثيات مثل 29.3375, 47.9744. الروابط المختصرة (maps.app.goo.gl) افتحها أولًا ثم انسخ الرابط الكامل."); return; }
-    if (await save({ latitude: String(point.latitude), longitude: String(point.longitude) })) setMapInput("");
-  };
-
   const postComment = async () => {
     const body = newComment.trim();
     if (body.length < 2) { setCommentError("اكتب التعليق أولًا."); return; }
@@ -190,11 +180,8 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
     finally { setImageBusy(false); }
   };
 
-  const hasMap = property.latitude !== null && property.latitude !== undefined && property.longitude !== null && property.longitude !== undefined;
   const navigationIndex = Math.max(0, navigationIds.indexOf(property.id));
-  const sourceExcel = fileSource?.id === property.id && Object.keys(fileSource.data).length ? fileSource.data : property.sourceExcel;
   const enteredBy = fileSource?.id === property.id ? fileSource.enteredBy : "";
-  const sourceFields = useMemo(() => Object.entries(sourceExcel ?? {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ""), [sourceExcel]);
   const options = (list: string[], current: string) => current && !list.includes(current) ? [current, ...list] : list;
   const set = (key: keyof Form) => (value: string) => setForm(old => ({ ...old, [key]: value }));
 
@@ -252,7 +239,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
         {/* Comments with date and marketer name */}
         <section className="flex min-w-0 flex-col rounded-xl border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-teal-600"/>التعليقات</div><span className="text-[10px] text-slate-400">{comments.length.toLocaleString("ar-KW")} تعليق</span></div>
@@ -275,26 +262,18 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
         </section>
 
         {/* Images, beside the comments; a click enlarges one */}
-        <section className="flex min-w-0 flex-col rounded-xl border border-slate-200 dark:border-slate-700">
+        <section className="flex min-w-0 flex-col self-start rounded-xl border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><ImageIcon size={16} className="text-teal-600"/>صور العقار</div><span className="text-[10px] text-slate-400">{images.length.toLocaleString("ar-KW")} / ١٢</span></div>
-          <div className="flex-1 p-3">
-            {images.length ? <div className="grid grid-cols-3 gap-2">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900"><button type="button" onClick={() => setViewer(index)} aria-label={`تكبير الصورة ${index + 1}`} className="block h-full w-full"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="h-full w-full object-cover transition group-hover:scale-105"/></button>{may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-rose-600/90 px-1.5 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={11}/>حذف</button>}</figure>)}</div>
-              : <div className="grid h-full min-h-28 place-items-center rounded-lg border border-dashed border-slate-300 text-[11px] text-slate-400 dark:border-slate-700">لا توجد صور مرفقة.</div>}
+          <div className="p-2.5">
+            {images.length ? <div className="grid grid-cols-2 gap-2">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900"><button type="button" onClick={() => setViewer(index)} aria-label={`تكبير الصورة ${index + 1}`} className="block h-full w-full"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="h-full w-full object-cover transition group-hover:scale-105"/></button>{may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-rose-600/90 px-1.5 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={11}/>حذف</button>}</figure>)}</div>
+              : <div className="grid aspect-[2/1] place-items-center rounded-lg border border-dashed border-slate-300 text-[11px] text-slate-400 dark:border-slate-700">لا توجد صور مرفقة.</div>}
           </div>
-          {may("images") && remote && <label className={`m-3 mt-0 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}
+          {may("images") && remote && <label className={`m-2.5 mt-0 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}
         </section>
         </div>
-        {sourceFields.length > 0 && <details className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}
-        <div className="rounded-xl border border-rose-100 p-3 dark:border-rose-900/50"><button onClick={() => setArchiveOpen(value => !value)} className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600"><Archive size={14}/>أرشفة العقار</button>{archiveOpen && <div className="mt-3 space-y-2"><label className="block text-[10px] font-bold">سبب الأرشفة سيظهر في سجل المحذوفات<textarea value={archiveComment} onChange={e => setArchiveComment(e.target.value)} rows={2} maxLength={500} className={`${inputClass} h-auto py-2`}/></label><button disabled={archiveComment.trim().length < 3} onClick={() => onArchive(archiveComment.trim())} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">تأكيد الأرشفة</button></div>}</div>
-
-        {/* Map, last */}
-        <Box title="الخريطة" action={hasMap ? <a href={`https://www.google.com/maps?q=${property.latitude},${property.longitude}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-400"><ExternalLink size={12}/>فتح في Google Maps</a> : undefined}>
-          {hasMap ? <iframe title="موقع العقار على الخريطة" src={`https://maps.google.com/maps?q=${property.latitude},${property.longitude}&z=17&output=embed`} loading="lazy" className="h-56 w-full rounded-lg border-0 sm:h-64"/> : <div className="grid h-24 place-items-center rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-400 dark:border-slate-700"><div className="flex items-center gap-2"><MapPin className="text-slate-300" size={18}/>لم يُحدد موقع العقار على الخريطة بعد</div></div>}
-          {may("map") && <div className="mt-2 flex flex-wrap gap-2"><input value={mapInput} onChange={e => setMapInput(e.target.value)} dir="ltr" placeholder="الصق رابط Google Maps أو 29.3375, 47.9744" className={`${inputClass} mt-0 min-w-0 flex-1`}/><button disabled={saving || (!mapInput.trim() && !hasMap)} onClick={() => void saveMap()} className="rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-slate-900">{mapInput.trim() ? "حفظ الموقع" : hasMap ? "حذف الموقع" : "حفظ الموقع"}</button></div>}
-        </Box>
       </div>
 
-      {navigationIds.length > 1 && <footer className="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-slate-700"><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex - 1])} disabled={navigationIndex <= 0 || editing} aria-label="العقار السابق" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronRight size={19}/></button><span className="text-[11px] text-slate-500">العقار {(navigationIndex + 1).toLocaleString("ar-KW")} من {navigationIds.length.toLocaleString("ar-KW")} في النتائج</span><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex + 1])} disabled={navigationIndex >= navigationIds.length - 1 || editing} aria-label="العقار التالي" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronLeft size={19}/></button></footer>}
+      {navigationIds.length > 1 && <footer className="flex items-center justify-between gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-700"><div className="flex items-center gap-2"><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex - 1])} disabled={navigationIndex <= 0 || editing} aria-label="العقار السابق" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronRight size={19}/></button>{onReverse && <button type="button" onClick={onReverse} disabled={editing} title="اعكس الترتيب وابدأ من الطرف التاني" className="flex h-10 items-center gap-1.5 rounded-xl border border-teal-300 bg-teal-50 px-3 text-[11px] font-bold text-teal-700 disabled:opacity-30 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300"><ArrowDownUp size={15}/>{reversed ? "من الآخر للأول" : "من الأول للآخر"}</button>}</div><span className="text-[11px] text-slate-500">العقار {(navigationIndex + 1).toLocaleString("ar-KW")} من {navigationIds.length.toLocaleString("ar-KW")} في النتائج</span><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex + 1])} disabled={navigationIndex >= navigationIds.length - 1 || editing} aria-label="العقار التالي" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronLeft size={19}/></button></footer>}
 
       {/* Rendered on <body> so the animated file window does not clip it. */}
       {viewer !== null && images[viewer] && typeof document !== "undefined" && createPortal(<div role="dialog" aria-modal="true" aria-label="صورة العقار مكبّرة" onMouseDown={e => e.target === e.currentTarget && setViewer(null)} className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4">
@@ -316,9 +295,6 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 const VISIBLE_COMMENTS = 2;
 const inputClass = "focus-ring mt-0.5 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900";
 
-function Box({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return <section className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="mb-1.5 flex items-center justify-between"><div className="text-[11px] font-black text-slate-500 dark:text-slate-400">{title}</div>{action}</div>{children}</section>;
-}
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0 rounded-xl border border-slate-200 px-2.5 py-1.5 dark:border-slate-700"><div className="text-[10px] font-black text-slate-500 dark:text-slate-400">{label}</div>{children}</div>;
 }
