@@ -108,13 +108,18 @@ export async function fetchFavoriteIds():Promise<string[]>{const db=createClient
 
 export async function setFavorite(id:string,shouldFavorite:boolean){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const result=shouldFavorite?await db.from("favorites").insert({user_id:user.id,property_id:id}):await db.from("favorites").delete().eq("user_id",user.id).eq("property_id",id);if(result.error)throw result.error;}
 
-export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean;sourceExcel:Record<string,unknown>|null;enteredByName:string};
+/** Parts of the property file an employee may be allowed to edit (users page checkboxes). */
+export const PROPERTY_EDIT_SCOPES=["info","price","phones","location_type","status","map","images"] as const;
+export type PropertyEditScope=typeof PROPERTY_EDIT_SCOPES[number];
+export const propertyEditScopeLabels:Record<PropertyEditScope,string>={info:"البيانات (المنطقة، القطاع، القطعة، التوزيعة، القسيمة، النوع، المساحة، اسم العميل)",price:"السعر",phones:"أرقام التليفون",location_type:"نوع الموقع",status:"الحالة (متاح / مباع)",map:"الخريطة",images:"الصور"};
+export const propertyEditScopeShort:Record<PropertyEditScope,string>={info:"البيانات",price:"السعر",phones:"الأرقام",location_type:"نوع الموقع",status:"الحالة",map:"الخريطة",images:"الصور"};
+export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean;sourceExcel:Record<string,unknown>|null;enteredByName:string;editScopes:string[]};
 export async function fetchPropertyFile(id:string):Promise<PropertyFileExtras>{
   const {data,error}=await createClient().rpc("get_property_file",{p_property_id:id});
   if(error)throw error;
-  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean;source_excel?:Record<string,unknown>|null;entered_by_name?:string|null}[])[0];
+  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean;source_excel?:Record<string,unknown>|null;entered_by_name?:string|null;edit_scopes?:string[]|null}[])[0];
   // Search results no longer carry the original Excel row; the file brings it when one property is opened.
-  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit),sourceExcel:row?.source_excel??null,enteredByName:row?.entered_by_name??""};
+  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit),sourceExcel:row?.source_excel??null,enteredByName:row?.entered_by_name??"",editScopes:row?.edit_scopes??(row?.can_edit?[...PROPERTY_EDIT_SCOPES]:[])};
 }
 
 export type PropertyFilePatch={client?:string;phones?:string[];type?:string;offer?:string;area?:string;locationType?:string;block?:string;plot?:string;street?:string;avenue?:string;sector?:string;distribution?:string;annexes?:string;details?:string;size?:string;price?:string;status?:Property["status"];latitude?:string;longitude?:string};

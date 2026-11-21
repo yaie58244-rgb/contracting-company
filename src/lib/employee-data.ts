@@ -12,11 +12,13 @@ export type EmployeeRecord = {
   can_add_property?: boolean;
   /** null follows the role, true/false overrides it for this person. */
   can_edit_property?: boolean | null;
+  /** null follows the role; otherwise the parts of the property file this person may edit. */
+  property_edit_scopes?: string[] | null;
   created_at: string;
 };
 
 export async function fetchEmployees(): Promise<EmployeeRecord[]> {
-  const columns = "id,full_name,email,role_id,is_active,phone_visible,price_visible,can_add_property,can_edit_property,created_at";
+  const columns = "id,full_name,email,role_id,is_active,phone_visible,price_visible,can_add_property,property_edit_scopes,created_at";
   const db = createClient();
   let result = await db.from("profiles").select(`${columns},username`).order("full_name");
   // Databases without migration 033 have no username column yet.
@@ -26,7 +28,7 @@ export async function fetchEmployees(): Promise<EmployeeRecord[]> {
 }
 
 export async function updateEmployee(id: string, patch: {
-  roleId?: string; isActive?: boolean; phoneVisible?: boolean; priceVisible?: boolean; canAddProperty?: boolean; canEditProperty?: "role" | "allow" | "deny";
+  roleId?: string; isActive?: boolean; phoneVisible?: boolean; priceVisible?: boolean; canAddProperty?: boolean; canEditProperty?: "role" | "allow" | "deny"; propertyEditScopes?: string[];
 }) {
   const { error } = await createClient().rpc("update_employee_profile", {
     p_profile_id: id,
@@ -36,6 +38,7 @@ export async function updateEmployee(id: string, patch: {
     p_price_visible: patch.priceVisible ?? null,
     p_can_add_property: patch.canAddProperty ?? null,
     p_can_edit_property: patch.canEditProperty ?? null,
+    p_property_edit_scopes: patch.propertyEditScopes ?? null,
   });
   if (error) throw error;
 }

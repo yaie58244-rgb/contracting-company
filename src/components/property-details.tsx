@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { motion } from "framer-motion";
 import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
 import type { Property } from "@/lib/types";
-import { addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
+import { PROPERTY_EDIT_SCOPES, addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyEditScope, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
 import { codeValues, useCodeLists } from "@/lib/code-lists";
 import { CodedInput } from "@/components/coded-input";
 import { sectorsOf, useAreaSectors } from "@/lib/area-sectors";
@@ -51,7 +51,11 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [phonesVisible, setPhonesVisible] = useState(!remote);
   const [annexes, setAnnexes] = useState(property.annexes ?? "");
   const [fileSource, setFileSource] = useState<{ id: string; data: Record<string, unknown>; enteredBy: string } | null>(null);
-  const [canEdit, setCanEdit] = useState(!remote);
+  const [scopes, setScopes] = useState<string[]>(remote ? [] : [...PROPERTY_EDIT_SCOPES]);
+  const may = (scope: PropertyEditScope) => scopes.includes(scope);
+  const canEdit = scopes.length > 0;
+  // Map, status and site type save on their own; the rest needs the edit mode.
+  const usesEditMode = may("info") || may("price") || may("phones") || may("images");
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
   const areaSectors = useAreaSectors();
@@ -77,7 +81,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
     setFileLoading(true);
     try {
       const file = await fetchPropertyFile(property.id);
-      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setCanEdit(file.canEdit); setFileSource({ id: property.id, data: file.sourceExcel ?? {}, enteredBy: file.enteredByName });
+      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setScopes(file.editScopes); setFileSource({ id: property.id, data: file.sourceExcel ?? {}, enteredBy: file.enteredByName });
     } catch (cause) {
       setError(cause instanceof Error ? `تعذر تحميل بيانات الملف: ${cause.message}` : "تعذر تحميل بيانات الملف.");
     } finally { setFileLoading(false); }
@@ -123,13 +127,16 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
     const size = digits(form.size).trim(), price = digits(form.price).trim();
     if (size && !Number.isFinite(Number(size))) { setError("المساحة يجب أن تكون رقمًا."); return; }
     if (price && !Number.isFinite(Number(price))) { setError("السعر يجب أن يكون رقمًا."); return; }
-    const patch: PropertyFilePatch = { client: form.client.trim(), type: form.type, offer: form.offer, area: form.area, locationType: form.locationType, sector: form.sector, block: form.block, plot: form.plot, street: form.street, annexes: form.annexes, size, status: form.status, details: form.details };
-    if (property.price !== null || price) patch.price = price;
-    if (phonesVisible) patch.phones = [form.phone1, form.phone2, ...phones.slice(2)].map(value => digits(value).trim()).filter(Boolean);
+    const patch: PropertyFilePatch = may("info") ? { client: form.client.trim(), type: form.type, offer: form.offer, area: form.area, sector: form.sector, block: form.block, plot: form.plot, street: form.street, annexes: form.annexes, size, details: form.details } : {};
+    if (may("location_type")) patch.locationType = form.locationType;
+    if (may("status")) patch.status = form.status;
+    if (may("price") && (property.price !== null || price)) patch.price = price;
+    if (may("phones") && phonesVisible) patch.phones = [form.phone1, form.phone2, ...phones.slice(2)].map(value => digits(value).trim()).filter(Boolean);
+    if (!Object.keys(patch).length) { setEditing(false); return; }
     if (await save(patch)) setEditing(false);
   };
 
-  const quickSave = (patch: PropertyFilePatch) => { if (canEdit) void save(patch); };
+  const quickSave = (patch: PropertyFilePatch) => { void save(patch); };
 
   const saveMap = async () => {
     if (!mapInput.trim()) { await save({ latitude: "", longitude: "" }); return; }
@@ -178,73 +185,61 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
   // Only the chosen area's sectors (جنوب المطلاع → N1…N12); a sector from another area is cleared when the area changes.
   const areaSectorList = sectorsOf(areaSectors, editing ? form.area : property.area);
-  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel"; field?: string; only?: string[] }) =>
-    <Field label={label}>{editing ? (extra?.field
+  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel"; field?: string; only?: string[]; scope?: PropertyEditScope }) =>
+    <Field label={label}>{editing && may(extra?.scope ?? "info") ? (extra?.field
       ? <CodedInput field={extra.field} lists={codes} only={extra.only} value={form[key]} onChange={set(key)} className={inputClass} inputProps={{ dir: extra.dir, inputMode: extra.inputMode }}/>
       : <input value={form[key]} onChange={e => set(key)(e.target.value)} dir={extra?.dir} inputMode={extra?.inputMode} className={inputClass}/>) : <Value>{value || "—"}</Value>}</Field>;
   const select = (key: keyof Form, label: string, list: string[], value: string) =>
-    <Field label={label}>{editing ? <select value={form[key]} onChange={e => set(key)(e.target.value)} className={inputClass}><option value="">—</option>{options(list, form[key]).map(x => <option key={x}>{x}</option>)}</select> : <Value>{value || "—"}</Value>}</Field>;
+    <Field label={label}>{editing && may("info") ? <select value={form[key]} onChange={e => set(key)(e.target.value)} className={inputClass}><option value="">—</option>{options(list, form[key]).map(x => <option key={x}>{x}</option>)}</select> : <Value>{value || "—"}</Value>}</Field>;
 
-  return <motion.div className="fixed inset-0 z-[62] grid place-items-center bg-slate-950/45 p-2 backdrop-blur-[2px] sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && !editing && onClose()}>
-    <motion.section dir="rtl" initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }} transition={{ duration: .2 }} className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+  return <motion.div className="fixed inset-0 z-[62] grid place-items-center bg-slate-950/45 p-1 backdrop-blur-[2px] sm:p-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => e.target === e.currentTarget && !editing && onClose()}>
+    <motion.section dir="rtl" initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }} transition={{ duration: .2 }} className="flex max-h-[98vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[20px] border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
       <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
         <button onClick={onClose} disabled={editing} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"><ArrowRight size={15}/>{backLabel ?? "رجوع"}</button>
         <div className="min-w-0 flex-1 px-2"><div className="text-[10px] font-bold text-slate-400">ملف العقار</div><div className="truncate text-sm font-black">{property.code} · {property.type} {property.offer !== "—" ? `· ${property.offer}` : ""}</div></div>
         {fileLoading && <LoaderCircle size={16} className="animate-spin text-teal-500"/>}
-        {canEdit && !editing && <button onClick={() => { setError(""); setEditing(true); }} className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-xs font-bold text-white"><Pencil size={14}/>تعديل البيانات</button>}
+        {usesEditMode && !editing && <button onClick={() => { setError(""); setEditing(true); }} className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-xs font-bold text-white"><Pencil size={14}/>تعديل البيانات</button>}
         {editing && <><button onClick={() => { setEditing(false); setError(""); }} className="rounded-xl px-3 py-2 text-xs font-bold text-slate-500">إلغاء</button><button disabled={saving} onClick={() => void saveForm()} className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? <LoaderCircle size={14} className="animate-spin"/> : <Save size={14}/>}حفظ التعديلات</button></>}
         <button onClick={() => window.print()} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="طباعة ملف العقار"><Printer size={17}/></button>
         <button onClick={onFavorite} className={`rounded-lg p-2 ${favorite ? "text-rose-500" : "text-slate-400"}`} aria-label="إضافة للمفضلة"><Heart size={18} fill={favorite ? "currentColor" : "none"}/></button>
         <button onClick={onClose} disabled={editing} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800" aria-label="إغلاق"><X size={18}/></button>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
-        {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
+        {error && <p role="alert" className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
 
-        {/* Top: client name (right) · phone numbers (left) */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-4">
-            <Box title="اسم العميل">{editing ? <input value={form.client} onChange={e => set("client")(e.target.value)} className={inputClass}/> : <div className="text-lg font-black">{property.client}</div>}</Box>
-            <Box title="نوع الموقع">
-              <select value={editing ? form.locationType : property.locationType} disabled={!canEdit || saving} onChange={e => editing ? set("locationType")(e.target.value) : quickSave({ locationType: e.target.value })} className={inputClass}>
-                <option value="">اختر نوع الموقع</option>{options(codeValues(codes, "location_type", fallbackLookups.location_type), editing ? form.locationType : property.locationType).map(x => <option key={x}>{x}</option>)}
-              </select>
-              {!canEdit && <p className="mt-1.5 text-[10px] text-slate-400">التعديل متاح لمن لديه صلاحية تعديل العقارات.</p>}
-            </Box>
-          </div>
-          <div className="space-y-4">
-            <Box title="رقم التليفون"><PhoneRow value={editing ? form.phone1 : phones[0]} editing={editing && phonesVisible} onChange={set("phone1")} hidden={!phonesVisible} loading={fileLoading}/></Box>
-            <Box title="رقم ٢"><PhoneRow value={editing ? form.phone2 : phones[1]} editing={editing && phonesVisible} onChange={set("phone2")} hidden={!phonesVisible} loading={fileLoading}/></Box>
-            {phones.length > 2 && !editing && <div className="text-[10px] text-slate-500">أرقام إضافية: <span dir="ltr">{phones.slice(2).join(" · ")}</span></div>}
-          </div>
+        {/* Client, phones and site type in one row */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="اسم العميل">{editing && may("info") ? <input value={form.client} onChange={e => set("client")(e.target.value)} className={inputClass}/> : <Value>{property.client}</Value>}</Field>
+          <Field label="رقم التليفون"><PhoneRow value={editing && may("phones") ? form.phone1 : phones[0]} editing={editing && may("phones") && phonesVisible} onChange={set("phone1")} hidden={!phonesVisible} loading={fileLoading}/></Field>
+          <Field label="رقم ٢"><PhoneRow value={editing && may("phones") ? form.phone2 : phones[1]} editing={editing && may("phones") && phonesVisible} onChange={set("phone2")} hidden={!phonesVisible} loading={fileLoading}/>{phones.length > 2 && !editing && <div className="mt-1 text-[10px] text-slate-500">أرقام إضافية: <span dir="ltr">{phones.slice(2).join(" · ")}</span></div>}</Field>
+          <Field label="نوع الموقع">
+            <select value={editing ? form.locationType : property.locationType} disabled={!may("location_type") || saving} onChange={e => editing ? set("locationType")(e.target.value) : quickSave({ locationType: e.target.value })} className={inputClass}>
+              <option value="">اختر نوع الموقع</option>{options(codeValues(codes, "location_type", fallbackLookups.location_type), editing ? form.locationType : property.locationType).map(x => <option key={x}>{x}</option>)}
+            </select>
+          </Field>
         </div>
 
-        {/* Map */}
-        <Box title="الخريطة" action={hasMap ? <a href={`https://www.google.com/maps?q=${property.latitude},${property.longitude}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-400"><ExternalLink size={12}/>فتح في Google Maps</a> : undefined}>
-          {hasMap ? <iframe title="موقع العقار على الخريطة" src={`https://maps.google.com/maps?q=${property.latitude},${property.longitude}&z=17&output=embed`} loading="lazy" className="h-64 w-full rounded-xl border-0 sm:h-72"/> : <div className="grid h-40 place-items-center rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-400 dark:border-slate-700"><div><MapPin className="mx-auto mb-2 text-slate-300" size={26}/>لم يُحدد موقع العقار على الخريطة بعد</div></div>}
-          {canEdit && <div className="mt-3 flex flex-wrap gap-2"><input value={mapInput} onChange={e => setMapInput(e.target.value)} dir="ltr" placeholder="الصق رابط Google Maps أو 29.3375, 47.9744" className={`${inputClass} mt-0 min-w-0 flex-1`}/><button disabled={saving || (!mapInput.trim() && !hasMap)} onClick={() => void saveMap()} className="rounded-xl bg-slate-900 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-slate-900">{mapInput.trim() ? "حفظ الموقع" : hasMap ? "حذف الموقع" : "حفظ الموقع"}</button></div>}
-        </Box>
-
-        {/* Grid from the sketch */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {/* Property data */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {select("offer", "نوع العرض", codeValues(codes, "offer_type", fallbackLookups.offer_type), property.offer === "—" ? "" : property.offer)}
           {select("area", "المنطقة", codeValues(codes, "area", fallbackLookups.area), property.area === "غير محدد" ? "" : property.area)}
           {text("sector", "القطاع", property.sector ?? "", { field: "sector", only: areaSectorList })}
           {text("block", "القطعة", property.block, { field: "block" })}
           {text("street", "التوزيعة", property.street, { field: "street" })}
           {text("plot", "القسيمة", property.plot, { field: "plot" })}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {select("type", "نوع العقار", codeValues(codes, "property_type", fallbackLookups.property_type), property.type === "غير محدد" ? "" : property.type)}
           {text("size", "المساحة م²", property.size ? property.size.toLocaleString("en-US") : "", { inputMode: "decimal" })}
-          {text("price", "السعر د.ك", property.price === null ? "مخفي" : property.price.toLocaleString("en-US"), { inputMode: "decimal" })}
-          <Field label="الحالة"><select value={editing ? form.status : property.status} disabled={!canEdit || saving} onChange={e => editing ? set("status")(e.target.value) : quickSave({ status: e.target.value as Property["status"] })} className={inputClass}><option value="available">متاح</option><option value="sold">مباع</option><option value="lost">مفقود</option></select></Field>
+          {text("price", "السعر د.ك", property.price === null ? "مخفي" : property.price.toLocaleString("en-US"), { inputMode: "decimal", scope: "price" })}
+          <Field label="الحالة"><select value={editing ? form.status : property.status} disabled={!may("status") || saving} onChange={e => editing ? set("status")(e.target.value) : quickSave({ status: e.target.value as Property["status"] })} className={inputClass}><option value="available">متاح</option><option value="sold">مباع</option><option value="lost">مفقود</option></select></Field>
         </div>
+        {!canEdit && remote && !fileLoading && <p className="text-[10px] text-slate-400">التعديل في ملف العقار مش مفعّل لحسابك.</p>}
+
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
 
         {/* Comments with date and marketer name */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-teal-600"/>التعليقات</div><span className="text-[10px] text-slate-400">{comments.length.toLocaleString("ar-KW")} تعليق</span></div>
+        <section className="rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-teal-600"/>التعليقات</div><span className="text-[10px] text-slate-400">{comments.length.toLocaleString("ar-KW")} تعليق</span></div>
           {/* The two newest comments stay visible; the rest open from the arrow under them. */}
           <div className={allComments ? "max-h-96 overflow-y-auto" : ""}>
             <table className="w-full text-right text-xs">
@@ -263,11 +258,15 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
           {commentError && <p role="alert" className="px-4 pb-3 text-[11px] text-rose-600">{commentError}</p>}
         </section>
 
-        <div className="grid gap-3 text-[11px] text-slate-500 sm:grid-cols-3"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
+        <details open={(editing && may("images")) || undefined} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="relative overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/>{editing && may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-2 top-2 flex items-center gap-1 rounded-lg bg-rose-600/90 px-2 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={12}/>حذف</button>}</figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}{editing && may("images") && remote && <label className={`mt-3 flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}</details>
+        {sourceFields.length > 0 && <details className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}
+        <div className="rounded-xl border border-rose-100 p-3 dark:border-rose-900/50"><button onClick={() => setArchiveOpen(value => !value)} className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600"><Archive size={14}/>أرشفة العقار</button>{archiveOpen && <div className="mt-3 space-y-2"><label className="block text-[10px] font-bold">سبب الأرشفة سيظهر في سجل المحذوفات<textarea value={archiveComment} onChange={e => setArchiveComment(e.target.value)} rows={2} maxLength={500} className={`${inputClass} h-auto py-2`}/></label><button disabled={archiveComment.trim().length < 3} onClick={() => onArchive(archiveComment.trim())} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">تأكيد الأرشفة</button></div>}</div>
 
-        <details open={editing || undefined} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="relative overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/>{editing && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-2 top-2 flex items-center gap-1 rounded-lg bg-rose-600/90 px-2 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={12}/>حذف</button>}</figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}{editing && remote && <label className={`mt-3 flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}</details>
-        {sourceFields.length > 0 && <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}
-        <div className="rounded-2xl border border-rose-100 p-4 dark:border-rose-900/50"><button onClick={() => setArchiveOpen(value => !value)} className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600"><Archive size={14}/>أرشفة العقار</button>{archiveOpen && <div className="mt-3 space-y-2"><label className="block text-[10px] font-bold">سبب الأرشفة سيظهر في سجل المحذوفات<textarea value={archiveComment} onChange={e => setArchiveComment(e.target.value)} rows={2} maxLength={500} className={`${inputClass} h-auto py-2`}/></label><button disabled={archiveComment.trim().length < 3} onClick={() => onArchive(archiveComment.trim())} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">تأكيد الأرشفة</button></div>}</div>
+        {/* Map, last */}
+        <Box title="الخريطة" action={hasMap ? <a href={`https://www.google.com/maps?q=${property.latitude},${property.longitude}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-400"><ExternalLink size={12}/>فتح في Google Maps</a> : undefined}>
+          {hasMap ? <iframe title="موقع العقار على الخريطة" src={`https://maps.google.com/maps?q=${property.latitude},${property.longitude}&z=17&output=embed`} loading="lazy" className="h-56 w-full rounded-lg border-0 sm:h-64"/> : <div className="grid h-24 place-items-center rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-400 dark:border-slate-700"><div className="flex items-center gap-2"><MapPin className="text-slate-300" size={18}/>لم يُحدد موقع العقار على الخريطة بعد</div></div>}
+          {may("map") && <div className="mt-2 flex flex-wrap gap-2"><input value={mapInput} onChange={e => setMapInput(e.target.value)} dir="ltr" placeholder="الصق رابط Google Maps أو 29.3375, 47.9744" className={`${inputClass} mt-0 min-w-0 flex-1`}/><button disabled={saving || (!mapInput.trim() && !hasMap)} onClick={() => void saveMap()} className="rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-slate-900">{mapInput.trim() ? "حفظ الموقع" : hasMap ? "حذف الموقع" : "حفظ الموقع"}</button></div>}
+        </Box>
       </div>
 
       {navigationIds.length > 1 && <footer className="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-slate-700"><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex - 1])} disabled={navigationIndex <= 0 || editing} aria-label="العقار السابق" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronRight size={19}/></button><span className="text-[11px] text-slate-500">العقار {(navigationIndex + 1).toLocaleString("ar-KW")} من {navigationIds.length.toLocaleString("ar-KW")} في النتائج</span><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex + 1])} disabled={navigationIndex >= navigationIds.length - 1 || editing} aria-label="العقار التالي" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronLeft size={19}/></button></footer>}
@@ -279,20 +278,20 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
 /** Comments shown before the "show all" arrow. */
 const VISIBLE_COMMENTS = 2;
-const inputClass = "focus-ring mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900";
+const inputClass = "focus-ring mt-0.5 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900";
 
 function Box({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return <section className="rounded-2xl border-2 border-slate-200 p-4 dark:border-slate-700"><div className="mb-2 flex items-center justify-between"><div className="text-[11px] font-black text-slate-500 dark:text-slate-400">{title}</div>{action}</div>{children}</section>;
+  return <section className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="mb-1.5 flex items-center justify-between"><div className="text-[11px] font-black text-slate-500 dark:text-slate-400">{title}</div>{action}</div>{children}</section>;
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="rounded-2xl border-2 border-slate-200 p-3 dark:border-slate-700"><div className="text-[10px] font-black text-slate-500 dark:text-slate-400">{label}</div>{children}</div>;
+  return <div className="min-w-0 rounded-xl border border-slate-200 px-2.5 py-1.5 dark:border-slate-700"><div className="text-[10px] font-black text-slate-500 dark:text-slate-400">{label}</div>{children}</div>;
 }
-function Value({ children }: { children: ReactNode }) { return <div className="mt-1 min-h-6 break-words text-sm font-bold">{children}</div>; }
+function Value({ children }: { children: ReactNode }) { return <div className="mt-0.5 min-h-5 break-words text-sm font-bold">{children}</div>; }
 function PhoneRow({ value, editing, hidden, loading, onChange }: { value?: string; editing: boolean; hidden: boolean; loading: boolean; onChange: (value: string) => void }) {
   if (editing) return <input value={value ?? ""} onChange={e => onChange(e.target.value)} dir="ltr" inputMode="tel" placeholder="مثال: 99999999" className={inputClass}/>;
   if (hidden) return <div className="text-[11px] text-slate-400">{loading ? "جارٍ التحميل…" : "عرض الأرقام غير مفعّل لحسابك"}</div>;
   if (!value) return <div className="text-sm font-bold text-slate-300">—</div>;
   const number = dialable(value);
-  return <div className="flex items-center gap-2"><Phone size={15} className="text-teal-600"/><a href={`tel:+${number}`} dir="ltr" className="flex-1 text-left text-base font-black tabular-nums">{value}</a><a href={`https://wa.me/${number}`} target="_blank" rel="noreferrer" className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">واتساب</a><a href={`tel:+${number}`} className="rounded-lg bg-teal-500/10 px-2.5 py-1.5 text-[10px] font-bold text-teal-700">اتصال</a></div>;
+  return <div className="mt-0.5 flex items-center gap-1.5"><Phone size={14} className="shrink-0 text-teal-600"/><a href={`tel:+${number}`} dir="ltr" className="min-w-0 flex-1 truncate text-left text-sm font-black tabular-nums">{value}</a><a href={`https://wa.me/${number}`} target="_blank" rel="noreferrer" className="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-700">واتساب</a><a href={`tel:+${number}`} className="rounded-md bg-teal-500/10 px-2 py-1 text-[10px] font-bold text-teal-700">اتصال</a></div>;
 }
 function PrintField({ label, value }: { label: string; value: string }) { return <div className="border-b border-slate-200 pb-2"><div className="text-[10px] text-slate-500">{label}</div><div className="mt-1 font-bold">{value}</div></div>; }
