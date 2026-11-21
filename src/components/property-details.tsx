@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, X } from "lucide-react";
+import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
 import type { Property } from "@/lib/types";
-import { addPropertyComment, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch } from "@/lib/property-data";
+import { addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
 import { codeValues, useCodeLists } from "@/lib/code-lists";
 import { CodedInput } from "@/components/coded-input";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/company-profile-data";
@@ -64,7 +64,8 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [commentError, setCommentError] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [allComments, setAllComments] = useState(false);
-  const [images, setImages] = useState<{ storage_path: string; caption: string | null }[]>([]);
+  const [images, setImages] = useState<PropertyImage[]>([]);
+  const [imageBusy, setImageBusy] = useState(false);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveComment, setArchiveComment] = useState("");
@@ -140,6 +141,24 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
       setNewComment("");
     } catch (cause) { setCommentError(cause instanceof Error ? cause.message : "تعذر إضافة التعليق."); }
     finally { setPostingComment(false); }
+  };
+
+  const reloadImages = async () => setImages(await fetchPropertyImages(property.id));
+  const addImages = async (files: File[]) => {
+    if (!files.length) return;
+    setImageBusy(true); setError("");
+    try {
+      for (const file of files.slice(0, Math.max(0, 12 - images.length))) await addPropertyImage(property.id, await compressImage(file));
+      await reloadImages();
+    } catch (cause) { setError(cause && typeof cause === "object" && "message" in cause ? `تعذر إضافة الصورة: ${String(cause.message)}` : "تعذر إضافة الصورة."); await reloadImages().catch(() => null); }
+    finally { setImageBusy(false); }
+  };
+  const removeImage = async (imageId: string) => {
+    if (!window.confirm("حذف الصورة دي من ملف العقار؟")) return;
+    setImageBusy(true); setError("");
+    try { await deletePropertyImage(imageId); await reloadImages(); }
+    catch (cause) { setError(cause && typeof cause === "object" && "message" in cause ? `تعذر حذف الصورة: ${String(cause.message)}` : "تعذر حذف الصورة."); }
+    finally { setImageBusy(false); }
   };
 
   const hasMap = property.latitude !== null && property.latitude !== undefined && property.longitude !== null && property.longitude !== undefined;
@@ -237,7 +256,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
         <div className="grid gap-3 text-[11px] text-slate-500 sm:grid-cols-3"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
 
-        <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={`${index}-${image.caption}`} className="overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/></figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}</details>
+        <details open={editing || undefined} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="relative overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/>{editing && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-2 top-2 flex items-center gap-1 rounded-lg bg-rose-600/90 px-2 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={12}/>حذف</button>}</figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}{editing && remote && <label className={`mt-3 flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}</details>
         {sourceFields.length > 0 && <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}
         <div className="rounded-2xl border border-rose-100 p-4 dark:border-rose-900/50"><button onClick={() => setArchiveOpen(value => !value)} className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600"><Archive size={14}/>أرشفة العقار</button>{archiveOpen && <div className="mt-3 space-y-2"><label className="block text-[10px] font-bold">سبب الأرشفة سيظهر في سجل المحذوفات<textarea value={archiveComment} onChange={e => setArchiveComment(e.target.value)} rows={2} maxLength={500} className={`${inputClass} h-auto py-2`}/></label><button disabled={archiveComment.trim().length < 3} onClick={() => onArchive(archiveComment.trim())} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">تأكيد الأرشفة</button></div>}</div>
       </div>
