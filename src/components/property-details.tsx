@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import { Archive, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MapPin, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { PROPERTY_EDIT_SCOPES, addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyEditScope, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
@@ -55,7 +56,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const may = (scope: PropertyEditScope) => scopes.includes(scope);
   const canEdit = scopes.length > 0;
   // Map, status and site type save on their own; the rest needs the edit mode.
-  const usesEditMode = may("info") || may("price") || may("phones") || may("images");
+  const usesEditMode = may("info") || may("price") || may("phones");
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
   const areaSectors = useAreaSectors();
@@ -72,6 +73,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [allComments, setAllComments] = useState(false);
   const [images, setImages] = useState<PropertyImage[]>([]);
   const [imageBusy, setImageBusy] = useState(false);
+  const [viewer, setViewer] = useState<number | null>(null);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveComment, setArchiveComment] = useState("");
@@ -114,7 +116,20 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   }, [remote, property.id, property.imageData]);
 
   // Esc closes the file, like the back button.
-  useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !editing) onClose(); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, [onClose, editing]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      // While a photo is enlarged, Esc and the arrows work on the photo only.
+      if (viewer !== null) {
+        if (event.key === "Escape") setViewer(null);
+        else if (event.key === "ArrowLeft") setViewer(i => i === null ? i : Math.min(images.length - 1, i + 1));
+        else if (event.key === "ArrowRight") setViewer(i => i === null ? i : Math.max(0, i - 1));
+        return;
+      }
+      if (event.key === "Escape" && !editing) onClose();
+    };
+    window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, editing, viewer, images.length]);
+  useEffect(() => { setViewer(null); }, [property.id]);
 
   const save = async (patch: PropertyFilePatch) => {
     setSaving(true); setError("");
@@ -237,8 +252,9 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
 
+        <div className="grid gap-3 lg:grid-cols-2">
         {/* Comments with date and marketer name */}
-        <section className="rounded-xl border border-slate-200 dark:border-slate-700">
+        <section className="flex min-w-0 flex-col rounded-xl border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-teal-600"/>التعليقات</div><span className="text-[10px] text-slate-400">{comments.length.toLocaleString("ar-KW")} تعليق</span></div>
           {/* The two newest comments stay visible; the rest open from the arrow under them. */}
           <div className={allComments ? "max-h-96 overflow-y-auto" : ""}>
@@ -258,7 +274,16 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
           {commentError && <p role="alert" className="px-4 pb-3 text-[11px] text-rose-600">{commentError}</p>}
         </section>
 
-        <details open={(editing && may("images")) || undefined} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="relative overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/>{editing && may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-2 top-2 flex items-center gap-1 rounded-lg bg-rose-600/90 px-2 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={12}/>حذف</button>}</figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}{editing && may("images") && remote && <label className={`mt-3 flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}</details>
+        {/* Images, beside the comments; a click enlarges one */}
+        <section className="flex min-w-0 flex-col rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700"><div className="flex items-center gap-2 text-sm font-black"><ImageIcon size={16} className="text-teal-600"/>صور العقار</div><span className="text-[10px] text-slate-400">{images.length.toLocaleString("ar-KW")} / ١٢</span></div>
+          <div className="flex-1 p-3">
+            {images.length ? <div className="grid grid-cols-3 gap-2">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900"><button type="button" onClick={() => setViewer(index)} aria-label={`تكبير الصورة ${index + 1}`} className="block h-full w-full"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="h-full w-full object-cover transition group-hover:scale-105"/></button>{may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-rose-600/90 px-1.5 py-1 text-[10px] font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={11}/>حذف</button>}</figure>)}</div>
+              : <div className="grid h-full min-h-28 place-items-center rounded-lg border border-dashed border-slate-300 text-[11px] text-slate-400 dark:border-slate-700">لا توجد صور مرفقة.</div>}
+          </div>
+          {may("images") && remote && <label className={`m-3 mt-0 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[11px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}
+        </section>
+        </div>
         {sourceFields.length > 0 && <details className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}
         <div className="rounded-xl border border-rose-100 p-3 dark:border-rose-900/50"><button onClick={() => setArchiveOpen(value => !value)} className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600"><Archive size={14}/>أرشفة العقار</button>{archiveOpen && <div className="mt-3 space-y-2"><label className="block text-[10px] font-bold">سبب الأرشفة سيظهر في سجل المحذوفات<textarea value={archiveComment} onChange={e => setArchiveComment(e.target.value)} rows={2} maxLength={500} className={`${inputClass} h-auto py-2`}/></label><button disabled={archiveComment.trim().length < 3} onClick={() => onArchive(archiveComment.trim())} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40">تأكيد الأرشفة</button></div>}</div>
 
@@ -270,6 +295,17 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
       </div>
 
       {navigationIds.length > 1 && <footer className="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-slate-700"><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex - 1])} disabled={navigationIndex <= 0 || editing} aria-label="العقار السابق" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronRight size={19}/></button><span className="text-[11px] text-slate-500">العقار {(navigationIndex + 1).toLocaleString("ar-KW")} من {navigationIds.length.toLocaleString("ar-KW")} في النتائج</span><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex + 1])} disabled={navigationIndex >= navigationIds.length - 1 || editing} aria-label="العقار التالي" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300"><ChevronLeft size={19}/></button></footer>}
+
+      {/* Rendered on <body> so the animated file window does not clip it. */}
+      {viewer !== null && images[viewer] && typeof document !== "undefined" && createPortal(<div role="dialog" aria-modal="true" aria-label="صورة العقار مكبّرة" onMouseDown={e => e.target === e.currentTarget && setViewer(null)} className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4">
+        <img src={images[viewer].storage_path} alt={images[viewer].caption || `صورة العقار ${viewer + 1}`} className="max-h-[90vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"/>
+        <button type="button" onClick={() => setViewer(null)} aria-label="إغلاق الصورة" className="absolute left-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"><X size={20}/></button>
+        {images.length > 1 && <>
+          <button type="button" disabled={viewer <= 0} onClick={() => setViewer(viewer - 1)} aria-label="الصورة السابقة" className="absolute right-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"><ChevronRight size={22}/></button>
+          <button type="button" disabled={viewer >= images.length - 1} onClick={() => setViewer(viewer + 1)} aria-label="الصورة التالية" className="absolute left-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"><ChevronLeft size={22}/></button>
+          <div className="absolute bottom-4 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white">{(viewer + 1).toLocaleString("ar-KW")} / {images.length.toLocaleString("ar-KW")}</div>
+        </>}
+      </div>, document.body)}
 
       <div className="print-sheet hidden" dir="rtl"><header className="mb-8 flex items-center justify-between border-b-2 border-slate-800 pb-5"><img src={company?.logo_url || "/brand/albatoul-logo.png"} alt="شعار الشركة" className="h-20 max-w-40 object-contain"/><div><h1 className="text-2xl font-black">{company?.name_ar || "ملف العقار"}</h1>{company?.name_en && <div className="mt-1 text-sm" dir="ltr">{company.name_en}</div>}<p className="mt-2 text-xs">{[company?.phone && `هاتف: ${company.phone}`, company?.fax && `فاكس: ${company.fax}`, company?.address].filter(Boolean).join(" · ")}</p></div><div className="text-left text-sm"><b>{property.code}</b><div className="mt-1">{dateFormat.format(new Date(property.date))}</div></div></header><h2 className="mb-4 text-xl font-bold">{property.type} · {property.offer}</h2><div className="grid grid-cols-3 gap-4 text-sm"><PrintField label="اسم العميل" value={property.client}/><PrintField label="رقم التليفون" value={phones[0] ?? "—"}/><PrintField label="رقم ٢" value={phones[1] ?? "—"}/><PrintField label="نوع الموقع" value={property.locationType || "—"}/><PrintField label="نوع العرض" value={property.offer}/><PrintField label="المنطقة" value={property.area}/><PrintField label="القطاع" value={property.sector || "—"}/><PrintField label="القطعة" value={property.block || "—"}/><PrintField label="التوزيعة" value={property.street || "—"}/><PrintField label="القسيمة" value={property.plot || "—"}/><PrintField label="المساحة" value={`${property.size} م²`}/><PrintField label="السعر" value={property.price === null ? "مخفي" : `${property.price.toLocaleString("en-KW")} د.ك`}/><PrintField label="الحالة" value={statusLabel(property.status)}/></div>{comments.length > 0 && <table className="mt-6 w-full border text-right text-xs"><thead><tr><th className="border p-2">اسم المسوق</th><th className="border p-2">التاريخ</th><th className="border p-2">التعليق</th></tr></thead><tbody>{comments.slice(0, 20).map(comment => <tr key={comment.id}><td className="border p-2">{comment.authorName}</td><td className="border p-2">{dateFormat.format(new Date(comment.createdAt))}</td><td className="border p-2">{comment.body}</td></tr>)}</tbody></table>}<footer className="mt-12 border-t pt-3 text-center text-[10px] text-slate-500">نسخة مطبوعة من نظام إدارة العقارات</footer></div>
     </motion.section>
