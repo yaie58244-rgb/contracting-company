@@ -10,6 +10,13 @@ import { usernameError } from "@/lib/username";
 
 const blank = { name: "", username: "", password: "", roleId: "", phoneVisible: false, priceVisible: false };
 
+/** Supabase errors are plain objects, so read their message and say the permission ones in Arabic. */
+function errorText(cause: unknown, fallback: string) {
+  const message = cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string" ? cause.message : "";
+  if (/permission is required/i.test(message)) return `${fallback} حسابك ليس له صلاحية إدارة المستخدمين؛ ادخل بحساب مدير النظام.`;
+  return message ? `${fallback} (${message})` : fallback;
+}
+
 export function EmployeesPage({ remote }: { remote: boolean }) {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -29,7 +36,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
       setEmployees(people); setRoles(matrix.roles);
       setForm(current => ({ ...current, roleId: current.roleId || matrix.roles.find(role => role.name === "sales_agent")?.id || matrix.roles[0]?.id || "" }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "تعذر تحميل الموظفين. تحقق من صلاحيات المستخدم وترحيل قاعدة البيانات.");
+      setError(errorText(cause, "تعذر تحميل الموظفين. تحقق من صلاحيات المستخدم وترحيل قاعدة البيانات."));
     } finally { setLoading(false); }
   }, [remote]);
 
@@ -45,7 +52,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
       setShowCreate(false); setForm({ ...blank, roleId: roles.find(role => role.name === "sales_agent")?.id || roles[0]?.id || "" });
       setMessage(`تم إنشاء المستخدم «${form.username.trim()}». يدخل إلى النظام باسم المستخدم وكلمة المرور.`);
       await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر إضافة المستخدم."); }
+    } catch (cause) { setError(errorText(cause, "تعذر إضافة المستخدم.")); }
     finally { setSaving(false); }
   };
 
@@ -62,7 +69,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
       setMessage(`تم حفظ بيانات دخول ${login.person.full_name}.`);
       setLogin(null);
       await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر حفظ بيانات الدخول."); }
+    } catch (cause) { setError(errorText(cause, "تعذر حفظ بيانات الدخول.")); }
     finally { setSaving(false); }
   };
 
@@ -74,12 +81,12 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
 
   const changeRole = async (person: EmployeeRecord, roleId: string) => {
     try { await updateEmployee(person.id, { roleId }); await refresh(); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر حفظ الدور."); }
+    catch (cause) { setError(errorText(cause, "تعذر حفظ الدور.")); }
   };
 
   const changeActive = async (person: EmployeeRecord) => {
     try { await updateEmployee(person.id, { isActive: !person.is_active }); await refresh(); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر تغيير حالة الحساب."); }
+    catch (cause) { setError(errorText(cause, "تعذر تغيير حالة الحساب.")); }
   };
 
   return <div className="animate-in space-y-5">
