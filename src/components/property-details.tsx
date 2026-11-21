@@ -49,7 +49,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [phones, setPhones] = useState<string[]>(property.phones);
   const [phonesVisible, setPhonesVisible] = useState(!remote);
   const [annexes, setAnnexes] = useState(property.annexes ?? "");
-  const [fileSource, setFileSource] = useState<{ id: string; data: Record<string, unknown> } | null>(null);
+  const [fileSource, setFileSource] = useState<{ id: string; data: Record<string, unknown>; enteredBy: string } | null>(null);
   const [canEdit, setCanEdit] = useState(!remote);
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
@@ -74,7 +74,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
     setFileLoading(true);
     try {
       const file = await fetchPropertyFile(property.id);
-      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setCanEdit(file.canEdit); if (file.sourceExcel) setFileSource({ id: property.id, data: file.sourceExcel });
+      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setCanEdit(file.canEdit); setFileSource({ id: property.id, data: file.sourceExcel ?? {}, enteredBy: file.enteredByName });
     } catch (cause) {
       setError(cause instanceof Error ? `تعذر تحميل بيانات الملف: ${cause.message}` : "تعذر تحميل بيانات الملف.");
     } finally { setFileLoading(false); }
@@ -144,7 +144,8 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
   const hasMap = property.latitude !== null && property.latitude !== undefined && property.longitude !== null && property.longitude !== undefined;
   const navigationIndex = Math.max(0, navigationIds.indexOf(property.id));
-  const sourceExcel = fileSource?.id === property.id ? fileSource.data : property.sourceExcel;
+  const sourceExcel = fileSource?.id === property.id && Object.keys(fileSource.data).length ? fileSource.data : property.sourceExcel;
+  const enteredBy = fileSource?.id === property.id ? fileSource.enteredBy : "";
   const sourceFields = useMemo(() => Object.entries(sourceExcel ?? {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ""), [sourceExcel]);
   const options = (list: string[], current: string) => current && !list.includes(current) ? [current, ...list] : list;
   const set = (key: keyof Form) => (value: string) => setForm(old => ({ ...old, [key]: value }));
@@ -234,7 +235,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
           {commentError && <p role="alert" className="px-4 pb-3 text-[11px] text-rose-600">{commentError}</p>}
         </section>
 
-        <div className="grid gap-3 text-[11px] text-slate-500 sm:grid-cols-3"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div><div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
+        <div className="grid gap-3 text-[11px] text-slate-500 sm:grid-cols-3"><div>الموظف المسؤول: <b className="text-slate-700 dark:text-slate-200">{property.employee}</b></div>{enteredBy && <div>أضاف العرض: <b className="text-teal-700 dark:text-teal-300">{enteredBy}</b></div>}<div>تاريخ الإضافة: <b className="tabular-nums text-slate-700 dark:text-slate-200">{dateFormat.format(new Date(property.date))}</b></div><div>{[property.distribution && `التوزيع ${property.distribution}`, property.avenue && `الجادة ${property.avenue}`].filter(Boolean).join(" · ")}</div></div>
 
         <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="flex cursor-pointer items-center gap-2 text-xs font-extrabold"><ImageIcon size={15} className="text-teal-600"/>صور العقار ({images.length})</summary>{images.length ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{images.map((image, index) => <figure key={`${index}-${image.caption}`} className="overflow-hidden rounded-xl"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="aspect-video w-full object-cover"/></figure>)}</div> : <p className="mt-3 text-[11px] text-slate-400">لا توجد صور مرفقة.</p>}</details>
         {sourceFields.length > 0 && <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer text-xs font-extrabold">الحقول الأصلية من ملف Excel ({sourceFields.length})</summary><dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{sourceFields.map(([key, value]) => <div key={key} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><dt className="text-[9px] text-slate-400">{key}</dt><dd className="mt-1 break-words text-[10px] font-semibold">{String(value)}</dd></div>)}</dl></details>}

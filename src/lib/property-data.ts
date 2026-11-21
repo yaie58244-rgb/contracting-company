@@ -76,7 +76,7 @@ export async function revealPropertyContact(id:string,comment:string):Promise<st
 
 export async function createProperty(property:Property,imageData:string|null=null) {
   const db=createClient();
-  const {error}=await db.rpc("create_property_with_image",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,avenue:property.avenue,floor:property.floor,building_type:property.buildingType,rooms_details:property.roomsDetails,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details},image_data:imageData});
+  const {error}=await db.rpc("create_property_with_image",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,avenue:property.avenue,floor:property.floor,building_type:property.buildingType,rooms_details:property.roomsDetails,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details,entered_by:property.enteredBy??""},image_data:imageData});
   if(error) throw error;
 }
 
@@ -94,13 +94,13 @@ export async function fetchFavoriteIds():Promise<string[]>{const db=createClient
 
 export async function setFavorite(id:string,shouldFavorite:boolean){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const result=shouldFavorite?await db.from("favorites").insert({user_id:user.id,property_id:id}):await db.from("favorites").delete().eq("user_id",user.id).eq("property_id",id);if(result.error)throw result.error;}
 
-export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean;sourceExcel:Record<string,unknown>|null};
+export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean;sourceExcel:Record<string,unknown>|null;enteredByName:string};
 export async function fetchPropertyFile(id:string):Promise<PropertyFileExtras>{
   const {data,error}=await createClient().rpc("get_property_file",{p_property_id:id});
   if(error)throw error;
-  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean;source_excel?:Record<string,unknown>|null}[])[0];
+  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean;source_excel?:Record<string,unknown>|null;entered_by_name?:string|null}[])[0];
   // Search results no longer carry the original Excel row; the file brings it when one property is opened.
-  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit),sourceExcel:row?.source_excel??null};
+  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit),sourceExcel:row?.source_excel??null,enteredByName:row?.entered_by_name??""};
 }
 
 export type PropertyFilePatch={client?:string;phones?:string[];type?:string;offer?:string;area?:string;locationType?:string;block?:string;plot?:string;street?:string;avenue?:string;sector?:string;distribution?:string;annexes?:string;details?:string;size?:string;price?:string;status?:Property["status"];latitude?:string;longitude?:string};
@@ -129,4 +129,19 @@ export async function fetchExportRows(onProgress?:(loaded:number)=>void):Promise
     const page=(data??[]) as ExportRow[];rows.push(...page);onProgress?.(rows.length);
     if(page.length<pageSize)return rows;
   }
+}
+
+/** Active staff names for the "who added the offer" dropdown. */
+export async function fetchStaffNames():Promise<{id:string;name:string}[]>{
+  const {data,error}=await createClient().rpc("list_staff_names");
+  if(error)throw error;
+  return ((data??[]) as {id:string;full_name:string}[]).map(row=>({id:row.id,name:row.full_name}));
+}
+
+export type StaffActivityRow={employeeId:string;name:string;role:string;comments:number;offersWorked:number;offersAdded:number;activeDays:number;lastCommentAt:string|null};
+/** Comments and commented offers per employee between two days (yyyy-mm-dd, Kuwait time). */
+export async function fetchStaffActivity(from:string,to:string):Promise<StaffActivityRow[]>{
+  const {data,error}=await createClient().rpc("staff_activity_report",{p_from:from,p_to:to});
+  if(error)throw error;
+  return ((data??[]) as {employee_id:string;employee_name:string;role_name:string|null;comments:number|string;offers_worked:number|string;offers_added:number|string;active_days:number|string;last_comment_at:string|null}[]).map(row=>({employeeId:row.employee_id,name:row.employee_name,role:row.role_name??"",comments:Number(row.comments),offersWorked:Number(row.offers_worked),offersAdded:Number(row.offers_added),activeDays:Number(row.active_days),lastCommentAt:row.last_comment_at}));
 }

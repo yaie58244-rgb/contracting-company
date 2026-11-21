@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Building2, Check, X, ImagePlus } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { CodedInput } from "@/components/coded-input";
 import { useCodeLists } from "@/lib/code-lists";
+import { createClient, hasSupabaseConfig } from "@/lib/supabase/client";
+import { fetchStaffNames } from "@/lib/property-data";
 
 // Built-in values, used until the admin codes these fields in Settings.
 const defaults = {
@@ -19,8 +21,12 @@ export function NewPropertyDialog({ onClose, onSave }: { onClose:()=>void; onSav
   const [form,setForm]=useState({code:"",client:"",phone:"",type:"",offer:"",area:"",block:"",plot:"",street:"",avenue:"",floor:"",buildingType:"",roomsDetails:"",locationType:"",size:"",price:"",employee:"",details:""});
   const [error,setError]=useState(""),[imageData,setImageData]=useState<string|null>(null);
   const codes=useCodeLists();
+  // The marketer who brought the offer: picked by name, defaults to whoever is signed in.
+  const remote=hasSupabaseConfig();
+  const [staff,setStaff]=useState<{id:string;name:string}[]>([]),[enteredBy,setEnteredBy]=useState("");
+  useEffect(()=>{if(!remote)return;let active=true;void Promise.all([fetchStaffNames(),createClient().auth.getSession()]).then(([names,{data}])=>{if(!active)return;setStaff(names);const me=data.session?.user.id;setEnteredBy(old=>old||(me&&names.some(x=>x.id===me)?me:""))}).catch(()=>{if(active)setError("تعذر تحميل أسماء المسوقين.")});return()=>{active=false}},[remote]);
   const update=(key:keyof typeof form,value:string)=>setForm(old=>({...old,[key]:value}));
-  const submit=(event:FormEvent)=>{event.preventDefault();setError("");if(!form.code.trim()||!form.client.trim()||!form.phone.trim()){setError("أدخل رمز العقار واسم العميل ورقم هاتف واحد على الأقل.");return}const raw=form.phone.replace(/\D/g,"");const local=raw.startsWith("965")?raw.slice(3):raw;onSave({id:crypto.randomUUID(),code:form.code.trim(),client:form.client.trim(),phones:[`+965 ${local}`],type:form.type,offer:form.offer,area:form.area,block:form.block.trim(),plot:form.plot.trim(),street:form.street.trim(),avenue:form.avenue.trim(),floor:form.floor.trim(),buildingType:form.buildingType.trim(),roomsDetails:form.roomsDetails.trim(),locationType:form.locationType,size:Number(form.size)||0,price:form.price?Number(form.price):null,employee:form.employee.trim()||"غير معيّن",status:"available",date:new Date().toISOString().slice(0,10),details:form.details.trim()},imageData)};
+  const submit=(event:FormEvent)=>{event.preventDefault();setError("");if(!form.code.trim()||!form.client.trim()||!form.phone.trim()){setError("أدخل رمز العقار واسم العميل ورقم هاتف واحد على الأقل.");return}if(remote&&!enteredBy){setError("اختر اسم المسوق اللي ضاف العرض.");return}const raw=form.phone.replace(/\D/g,"");const local=raw.startsWith("965")?raw.slice(3):raw;onSave({id:crypto.randomUUID(),code:form.code.trim(),client:form.client.trim(),phones:[`+965 ${local}`],type:form.type,offer:form.offer,area:form.area,block:form.block.trim(),plot:form.plot.trim(),street:form.street.trim(),avenue:form.avenue.trim(),floor:form.floor.trim(),buildingType:form.buildingType.trim(),roomsDetails:form.roomsDetails.trim(),locationType:form.locationType,size:Number(form.size)||0,price:form.price?Number(form.price):null,employee:form.employee.trim()||"غير معيّن",status:"available",date:new Date().toISOString().slice(0,10),details:form.details.trim(),enteredBy:enteredBy||undefined},imageData)};
   const selectImage=(file:File|undefined)=>{if(!file)return;if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>1_400_000){setError("اختر صورة JPG أو PNG أو WebP بحجم لا يتجاوز ١٫٤ ميجابايت.");return}const reader=new FileReader();reader.onload=()=>{setImageData(typeof reader.result==="string"?reader.result:null);setError("")};reader.onerror=()=>setError("تعذر قراءة الصورة.");reader.readAsDataURL(file)};
   const input="focus-ring mt-1.5 h-10 w-full rounded-xl border border-slate-200/80 bg-white/55 px-3 text-xs outline-none dark:border-slate-700 dark:bg-slate-900/50";
   const coded=(key:keyof typeof form,field:string,label:string,fallback?:string[])=><label className="text-[11px] font-bold">{label}<CodedInput field={field} lists={codes} fallback={fallback} value={form[key]} onChange={value=>update(key,value)} className={input}/></label>;
@@ -29,6 +35,7 @@ export function NewPropertyDialog({ onClose, onSave }: { onClose:()=>void; onSav
       <label className="text-[11px] font-bold">رمز العقار *<input required value={form.code} onChange={e=>update("code",e.target.value)} placeholder="مثال: A-2402" className={input} dir="ltr"/></label>
       <label className="text-[11px] font-bold">اسم العميل *<input required value={form.client} onChange={e=>update("client",e.target.value)} className={input}/></label>
       <label className="text-[11px] font-bold">رقم الهاتف *<input required value={form.phone} onChange={e=>update("phone",e.target.value)} placeholder="5XXX XXXX" className={input} dir="ltr"/></label>
+      {remote&&<label className="text-[11px] font-bold sm:col-span-2">المسوق اللي ضاف العرض *<select required value={enteredBy} onChange={e=>setEnteredBy(e.target.value)} className={input}><option value="">اختر الاسم</option>{staff.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>}
       <label className="text-[11px] font-bold">الموظف المسؤول<input value={form.employee} onChange={e=>update("employee",e.target.value)} className={input}/></label>
       {coded("type","property_type","نوع العقار",defaults.property_type)}
       {coded("offer","offer_type","نوع العرض",defaults.offer_type)}
