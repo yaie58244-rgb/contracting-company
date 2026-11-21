@@ -94,12 +94,13 @@ export async function fetchFavoriteIds():Promise<string[]>{const db=createClient
 
 export async function setFavorite(id:string,shouldFavorite:boolean){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const result=shouldFavorite?await db.from("favorites").insert({user_id:user.id,property_id:id}):await db.from("favorites").delete().eq("user_id",user.id).eq("property_id",id);if(result.error)throw result.error;}
 
-export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean};
+export type PropertyFileExtras={phones:string[];phonesVisible:boolean;annexes:string;canEdit:boolean;sourceExcel:Record<string,unknown>|null};
 export async function fetchPropertyFile(id:string):Promise<PropertyFileExtras>{
   const {data,error}=await createClient().rpc("get_property_file",{p_property_id:id});
   if(error)throw error;
-  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean}[])[0];
-  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit)};
+  const row=((data??[]) as {phones:string[]|null;phones_visible:boolean;annexes:string|null;can_edit:boolean;source_excel?:Record<string,unknown>|null}[])[0];
+  // Search results no longer carry the original Excel row; the file brings it when one property is opened.
+  return {phones:row?.phones??[],phonesVisible:Boolean(row?.phones_visible),annexes:row?.annexes??"",canEdit:Boolean(row?.can_edit),sourceExcel:row?.source_excel??null};
 }
 
 export type PropertyFilePatch={client?:string;phones?:string[];type?:string;offer?:string;area?:string;locationType?:string;block?:string;plot?:string;street?:string;avenue?:string;sector?:string;distribution?:string;annexes?:string;details?:string;size?:string;price?:string;status?:Property["status"];latitude?:string;longitude?:string};

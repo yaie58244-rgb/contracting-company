@@ -49,6 +49,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [phones, setPhones] = useState<string[]>(property.phones);
   const [phonesVisible, setPhonesVisible] = useState(!remote);
   const [annexes, setAnnexes] = useState(property.annexes ?? "");
+  const [fileSource, setFileSource] = useState<{ id: string; data: Record<string, unknown> } | null>(null);
   const [canEdit, setCanEdit] = useState(!remote);
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
@@ -73,7 +74,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
     setFileLoading(true);
     try {
       const file = await fetchPropertyFile(property.id);
-      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setCanEdit(file.canEdit);
+      setPhones(file.phones); setPhonesVisible(file.phonesVisible); setAnnexes(file.annexes); setCanEdit(file.canEdit); if (file.sourceExcel) setFileSource({ id: property.id, data: file.sourceExcel });
     } catch (cause) {
       setError(cause instanceof Error ? `تعذر تحميل بيانات الملف: ${cause.message}` : "تعذر تحميل بيانات الملف.");
     } finally { setFileLoading(false); }
@@ -143,7 +144,8 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
   const hasMap = property.latitude !== null && property.latitude !== undefined && property.longitude !== null && property.longitude !== undefined;
   const navigationIndex = Math.max(0, navigationIds.indexOf(property.id));
-  const sourceFields = useMemo(() => Object.entries(property.sourceExcel ?? {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ""), [property.sourceExcel]);
+  const sourceExcel = fileSource?.id === property.id ? fileSource.data : property.sourceExcel;
+  const sourceFields = useMemo(() => Object.entries(sourceExcel ?? {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ""), [sourceExcel]);
   const options = (list: string[], current: string) => current && !list.includes(current) ? [current, ...list] : list;
   const set = (key: keyof Form) => (value: string) => setForm(old => ({ ...old, [key]: value }));
 
