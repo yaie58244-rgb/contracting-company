@@ -36,7 +36,7 @@ export function NewPropertyDialog({ onClose, onSave }: { onClose:()=>void; onSav
       {coded("locationType","location_type","نوع الموقع",defaults.location_type)}
       {coded("block","block","القطعة")}
       {coded("plot","plot","القسيمة")}
-      {coded("street","street","الشارع")}
+      {coded("street","street","التوزيعة")}
       {coded("avenue","avenue","الجادة")}
       {coded("floor","floor","الدور")}
       {coded("buildingType","building_type","نوع المبنى")}

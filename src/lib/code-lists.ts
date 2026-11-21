@@ -18,7 +18,7 @@ export const CODE_FIELDS = [
   { id: "distribution", label: "التوزيع" },
   { id: "block", label: "القطعة" },
   { id: "plot", label: "القسيمة" },
-  { id: "street", label: "الشارع" },
+  { id: "street", label: "التوزيعة" },
   { id: "avenue", label: "الجادة" },
   { id: "floor", label: "الدور" },
   { id: "building_type", label: "نوع المبنى" },
