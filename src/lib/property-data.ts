@@ -96,13 +96,10 @@ export function compressImage(file:File):Promise<string>{
   });
 }
 
-export async function updatePropertyStatus(id:string,status:Property["status"]){const db=createClient();const {error}=await db.rpc("update_property_status",{property_id:id,new_status:status});if(error)throw error;}
 
 export async function archiveProperty(id:string,comment:string){const db=createClient();const {error}=await db.rpc("archive_property",{p_property_id:id,p_comment:comment});if(error)throw error;}
 
-export async function updatePropertyMap(id:string,latitude:number|null,longitude:number|null){const {error}=await createClient().rpc("update_property_map",{p_property_id:id,p_latitude:latitude,p_longitude:longitude});if(error)throw error;}
 
-export async function updatePropertyLocation(id:string,location:{area:string;sector:string;distribution:string;block:string;plot:string;street:string;locationType:string}){const {error}=await createClient().rpc("update_property_location",{p_property_id:id,p_area:location.area,p_sector:location.sector,p_distribution:location.distribution,p_block:location.block,p_plot:location.plot,p_street:location.street,p_location_type:location.locationType});if(error)throw error;}
 
 export async function fetchFavoriteIds():Promise<string[]>{const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const {data,error}=await db.from("favorites").select("property_id").eq("user_id",user.id);if(error)throw error;return ((data??[]) as {property_id:string}[]).map(row=>row.property_id);}
 
