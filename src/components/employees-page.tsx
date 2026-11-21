@@ -20,6 +20,7 @@ function errorText(cause: unknown, fallback: string) {
 export function EmployeesPage({ remote }: { remote: boolean }) {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [editPermissionId, setEditPermissionId] = useState("");
   const [form, setForm] = useState(blank);
   const [loading, setLoading] = useState(remote);
   const [saving, setSaving] = useState(false);
@@ -33,7 +34,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
     setLoading(true); setError("");
     try {
       const [people, matrix] = await Promise.all([fetchEmployees(), fetchRoleMatrix()]);
-      setEmployees(people); setRoles(matrix.roles);
+      setEmployees(people); setRoles(matrix.roles); setEditPermissionId(matrix.permissions.find(x => x.module === "properties" && x.action === "edit")?.id ?? "");
       setForm(current => ({ ...current, roleId: current.roleId || matrix.roles.find(role => role.name === "sales_agent")?.id || matrix.roles[0]?.id || "" }));
     } catch (cause) {
       setError(errorText(cause, "تعذر تحميل الموظفين. تحقق من صلاحيات المستخدم وترحيل قاعدة البيانات."));
@@ -96,9 +97,10 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
   // Per person: follow the role, or allow / block editing property files whatever the role says.
   const editCell = (person: EmployeeRecord) => {
     const role = roles.find(r => r.id === person.role_id);
-    if (role && ["super_admin", "manager"].includes(role.name)) return <span className="text-[10px] font-bold text-teal-700">دايمًا مسموح</span>;
+    // What "follow the role" means for this person, shown in the first option.
+    const roleAllows = !!role && (["super_admin", "manager"].includes(role.name) || role.permissions.some(x => x.permissionId === editPermissionId && x.allowed));
     const setting = person.can_edit_property === true ? "allow" : person.can_edit_property === false ? "deny" : "role";
-    return <select aria-label={`تعديل ملف العقار لـ ${person.full_name}`} value={setting} onChange={event => void changeCanEdit(person, event.target.value as "role" | "allow" | "deny")} className={`focus-ring rounded-lg border px-2 py-1.5 text-[10px] font-bold dark:bg-slate-900 ${setting === "allow" ? "border-teal-300 bg-teal-50 text-teal-700" : setting === "deny" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700"}`}><option value="role">حسب الدور</option><option value="allow">مسموح</option><option value="deny">ممنوع</option></select>;
+    return <select aria-label={`تعديل ملف العقار لـ ${person.full_name}`} value={setting} onChange={event => void changeCanEdit(person, event.target.value as "role" | "allow" | "deny")} className={`focus-ring rounded-lg border px-2 py-1.5 text-[10px] font-bold dark:bg-slate-900 ${setting === "allow" ? "border-teal-300 bg-teal-50 text-teal-700" : setting === "deny" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700"}`}><option value="role">حسب الدور ({roleAllows ? "مسموح" : "ممنوع"})</option><option value="allow">مسموح</option><option value="deny">ممنوع</option></select>;
   };
 
   const changeActive = async (person: EmployeeRecord) => {
