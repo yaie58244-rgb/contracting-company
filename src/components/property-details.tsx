@@ -6,6 +6,7 @@ import type { Property } from "@/lib/types";
 import { addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
 import { codeValues, useCodeLists } from "@/lib/code-lists";
 import { CodedInput } from "@/components/coded-input";
+import { sectorsOf, useAreaSectors } from "@/lib/area-sectors";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/company-profile-data";
 import { dialable } from "@/lib/phone-format";
 import { digits } from "@/lib/utils";
@@ -53,6 +54,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [canEdit, setCanEdit] = useState(!remote);
   const [fileLoading, setFileLoading] = useState(remote);
   const codes = useCodeLists();
+  const areaSectors = useAreaSectors();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Form>(() => formFrom(property, property.phones, property.annexes ?? ""));
   const [saving, setSaving] = useState(false);
@@ -91,6 +93,11 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
   useEffect(() => { void loadFile(); void loadComments(); }, [loadFile, loadComments]);
   useEffect(() => { if (!editing) setForm(formFrom(property, phones, annexes)); }, [property, phones, annexes, editing]);
+  useEffect(() => {
+    if (!editing) return;
+    const list = sectorsOf(areaSectors, form.area);
+    if (list.length && form.sector && !list.includes(form.sector)) setForm(old => ({ ...old, sector: "" }));
+  }, [editing, form.area, form.sector, areaSectors]);
   useEffect(() => {
     if (!remote) { setImages(property.imageData ? [{ storage_path: property.imageData, caption: "صورة العقار" }] : []); return; }
     let active = true;
@@ -169,9 +176,11 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const options = (list: string[], current: string) => current && !list.includes(current) ? [current, ...list] : list;
   const set = (key: keyof Form) => (value: string) => setForm(old => ({ ...old, [key]: value }));
 
-  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel"; field?: string }) =>
+  // Only the chosen area's sectors (جنوب المطلاع → N1…N12); a sector from another area is cleared when the area changes.
+  const areaSectorList = sectorsOf(areaSectors, editing ? form.area : property.area);
+  const text = (key: keyof Form, label: string, value: string, extra?: { dir?: "ltr"; inputMode?: "numeric" | "decimal" | "tel"; field?: string; only?: string[] }) =>
     <Field label={label}>{editing ? (extra?.field
-      ? <CodedInput field={extra.field} lists={codes} value={form[key]} onChange={set(key)} className={inputClass} inputProps={{ dir: extra.dir, inputMode: extra.inputMode }}/>
+      ? <CodedInput field={extra.field} lists={codes} only={extra.only} value={form[key]} onChange={set(key)} className={inputClass} inputProps={{ dir: extra.dir, inputMode: extra.inputMode }}/>
       : <input value={form[key]} onChange={e => set(key)(e.target.value)} dir={extra?.dir} inputMode={extra?.inputMode} className={inputClass}/>) : <Value>{value || "—"}</Value>}</Field>;
   const select = (key: keyof Form, label: string, list: string[], value: string) =>
     <Field label={label}>{editing ? <select value={form[key]} onChange={e => set(key)(e.target.value)} className={inputClass}><option value="">—</option>{options(list, form[key]).map(x => <option key={x}>{x}</option>)}</select> : <Value>{value || "—"}</Value>}</Field>;
@@ -220,7 +229,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {select("offer", "نوع العرض", codeValues(codes, "offer_type", fallbackLookups.offer_type), property.offer === "—" ? "" : property.offer)}
           {select("area", "المنطقة", codeValues(codes, "area", fallbackLookups.area), property.area === "غير محدد" ? "" : property.area)}
-          {text("sector", "القطاع", property.sector ?? "", { field: "sector" })}
+          {text("sector", "القطاع", property.sector ?? "", { field: "sector", only: areaSectorList })}
           {text("block", "القطعة", property.block, { field: "block" })}
           {text("street", "التوزيعة", property.street, { field: "street" })}
           {text("plot", "القسيمة", property.plot, { field: "plot" })}

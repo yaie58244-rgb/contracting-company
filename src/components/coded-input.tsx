@@ -18,6 +18,8 @@ type Props = {
   required?: boolean;
   disabled?: boolean;
   inputProps?: InputHTMLAttributes<HTMLInputElement>;
+  /** When non-empty, only these values are offered (e.g. the sectors of the chosen area). */
+  only?: string[];
 };
 
 /**
@@ -25,9 +27,10 @@ type Props = {
  * Settings, and stays a plain text box otherwise. A stored value that is not
  * in the list is kept as an extra option so editing never loses data.
  */
-export function CodedInput({ field, lists, value, onChange, className, fallback, emptyLabel, required, disabled, inputProps }: Props) {
+export function CodedInput({ field, lists, value, onChange, className, fallback, emptyLabel, required, disabled, inputProps, only }: Props) {
   const coded = lists[field];
-  const options: CodeOption[] = coded?.length ? coded : (fallback ?? []).map(item => ({ value: item, code: null }));
+  const all: CodeOption[] = coded?.length ? coded : (fallback ?? []).map(item => ({ value: item, code: null }));
+  const options: CodeOption[] = only?.length ? only.map(item => all.find(option => option.value === item) ?? { value: item, code: null }) : all;
   if (!options.length) {
     return <input value={value} onChange={e => onChange(e.target.value)} disabled={disabled} className={className} {...inputProps}/>;
   }
