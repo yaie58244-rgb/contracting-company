@@ -165,7 +165,7 @@ export function ClientDetailDialog({
           ><ChevronRight size={20} /></button>
           <div className="min-w-0 flex-1 text-center">
             <h2 className="truncate text-sm font-black">{client.name}</h2>
-            <div className="mt-0.5 text-[10px] text-slate-400">
+            <div className="mt-0.5 text-xs text-slate-400">
               {index + 1} من {clients.length} · {client.source || "مصدر غير محدد"}
             </div>
           </div>
@@ -182,25 +182,25 @@ export function ClientDetailDialog({
             <div className="flex items-start gap-3 rounded-2xl bg-white/40 p-3 dark:bg-slate-900/30">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-600"><UserRound size={22} /></div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] text-slate-400">{client.source || "مصدر غير محدد"}</div>
+                <div className="text-xs text-slate-400">{client.source || "مصدر غير محدد"}</div>
                 {(client.sourceNames ?? []).length > 0 && (
-                  <div className="mt-1 text-[10px] leading-5 text-slate-500">أسماء أخرى: {(client.sourceNames ?? []).join("، ")}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">أسماء أخرى: {(client.sourceNames ?? []).join("، ")}</div>
                 )}
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-teal-50/70 px-2.5 py-2 dark:bg-teal-950/25">
-                  <span className="text-[10px] font-bold">{claim ? `قيد المتابعة: ${claim.employeeName}` : "متاح لمندوب المبيعات"}</span>
+                  <span className="text-xs font-bold">{claim ? `قيد المتابعة: ${claim.employeeName}` : "متاح لمندوب المبيعات"}</span>
                   {isMine
-                    ? <button type="button" disabled={busy === "claim"} onClick={() => void toggleClaim(true)} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-teal-700 disabled:opacity-50">إنهاء التعامل</button>
+                    ? <button type="button" disabled={busy === "claim"} onClick={() => void toggleClaim(true)} className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-teal-700 disabled:opacity-50">إنهاء التعامل</button>
                     : !claim
-                      ? <button type="button" disabled={busy === "claim"} onClick={() => void toggleClaim(false)} className="rounded-lg bg-teal-600 px-2.5 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">إضافته لمفضلتي</button>
+                      ? <button type="button" disabled={busy === "claim"} onClick={() => void toggleClaim(false)} className="rounded-lg bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-50">إضافته لمفضلتي</button>
                       : null}
                 </div>
               </div>
             </div>
 
-            {addressLine && <p className="rounded-xl bg-violet-50/50 p-3 text-[11px] leading-6 text-slate-600 dark:bg-violet-950/20 dark:text-slate-300">{addressLine}</p>}
+            {addressLine && <p className="rounded-xl bg-violet-50/50 p-3 text-[13px] leading-6 text-slate-600 dark:bg-violet-950/20 dark:text-slate-300">{addressLine}</p>}
 
             <div className="space-y-2">
-              <h3 className="text-[11px] font-extrabold">بيانات التواصل</h3>
+              <h3 className="text-[13px] font-extrabold">بيانات التواصل</h3>
               {phones.length ? phones.map((phone, position) => {
                 const digits = dialable(phone);
                 return (
@@ -209,32 +209,32 @@ export function ClientDetailDialog({
                       <span className="text-sm font-black tabular-nums tracking-tight">{formatPhone(digits)}</span>
                       <Phone size={14} className="text-teal-600" />
                     </a>
-                    <a href={`tel:+${digits}`} className="rounded-lg bg-teal-500/10 px-3 py-1.5 text-[10px] font-bold text-teal-700">اتصال</a>
-                    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold text-emerald-700"><MessageCircle size={13} />واتساب</a>
+                    <a href={`tel:+${digits}`} className="rounded-lg bg-teal-500/10 px-3 py-1.5 text-xs font-bold text-teal-700">اتصال</a>
+                    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-700"><MessageCircle size={13} />واتساب</a>
                   </div>
                 );
-              }) : <p className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] text-slate-500">لا يوجد رقم هاتف مسجل لهذا العميل.</p>}
+              }) : <p className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-500">لا يوجد رقم هاتف مسجل لهذا العميل.</p>}
             </div>
 
             {(client.tags ?? []).length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {client.tags.map(tag => <span key={tag} className="rounded-full bg-violet-50 px-2 py-1 text-[9px] text-violet-700">{tag}</span>)}
+                {client.tags.map(tag => <span key={tag} className="rounded-full bg-violet-50 px-2 py-1 text-[11px] text-violet-700">{tag}</span>)}
               </div>
             )}
 
-            {client.notes && <p className="rounded-xl bg-slate-100/60 p-3 text-[10px] leading-5 text-slate-500 dark:bg-slate-800/50">{client.notes}</p>}
+            {client.notes && <p className="rounded-xl bg-slate-100/60 p-3 text-xs leading-5 text-slate-500 dark:bg-slate-800/50">{client.notes}</p>}
           </section>
 
           <section className="space-y-4">
             <div>
               <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="text-[11px] font-extrabold">صور العميل <span className="text-slate-400">({images.length})</span></h3>
+                <h3 className="text-[13px] font-extrabold">صور العميل <span className="text-slate-400">({images.length})</span></h3>
                 {canManage && (
                   <>
                     <input ref={fileRef} type="file" accept="image/*" hidden onChange={event => void pickFile(event)} />
                     <button
                       type="button" disabled={busy === "upload"} onClick={() => fileRef.current?.click()}
-                      className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
                     >
                       {busy === "upload" ? <LoaderCircle size={13} className="animate-spin" /> : <ImagePlus size={13} />} إضافة صورة
                     </button>
@@ -248,7 +248,7 @@ export function ClientDetailDialog({
                       <button type="button" onClick={() => setPreview(image)} className="h-full w-full">
                         {image.url
                           ? <img src={image.url} alt={image.caption || client.name} className="h-full w-full object-cover" loading="lazy" />
-                          : <span className="grid h-full w-full place-items-center text-[9px] text-slate-400">تعذر التحميل</span>}
+                          : <span className="grid h-full w-full place-items-center text-[11px] text-slate-400">تعذر التحميل</span>}
                       </button>
                       {canManage && (
                         <div className="absolute left-1 top-1 flex gap-1">
@@ -268,7 +268,7 @@ export function ClientDetailDialog({
                   ))}
                 </div>
               ) : (
-                <p className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-[10px] text-slate-400 dark:border-slate-700">
+                <p className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-xs text-slate-400 dark:border-slate-700">
                   {canManage ? "لا توجد صور بعد. اضغط «إضافة صورة» لإرفاق صورة لهذا العميل." : "لا توجد صور لهذا العميل."}
                 </p>
               )}
@@ -276,32 +276,32 @@ export function ClientDetailDialog({
 
             <div className="rounded-xl border border-slate-200/60 p-3 dark:border-slate-700">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-[11px] font-extrabold">تعليقات الفريق</h3>
-                <span className="text-[9px] text-slate-400">{comments.length} تعليق</span>
+                <h3 className="text-[13px] font-extrabold">تعليقات الفريق</h3>
+                <span className="text-[11px] text-slate-400">{comments.length} تعليق</span>
               </div>
               <div className="mb-2 max-h-56 space-y-2 overflow-y-auto">
                 {comments.map(comment => (
                   <div key={comment.id} className="rounded-lg bg-white/60 p-2 dark:bg-slate-900/50">
-                    <div className="text-[10px] leading-5">{comment.body}</div>
-                    <div className="mt-1 text-[9px] text-slate-400">{comment.authorName} · {new Date(comment.createdAt).toLocaleString("ar-KW")}</div>
+                    <div className="text-xs leading-5">{comment.body}</div>
+                    <div className="mt-1 text-[11px] text-slate-400">{comment.authorName} · {new Date(comment.createdAt).toLocaleString("ar-KW")}</div>
                   </div>
                 ))}
-                {!comments.length && <p className="text-[10px] text-slate-400">لا توجد تعليقات بعد. أول تعليق يظهر لكل الفريق.</p>}
+                {!comments.length && <p className="text-xs text-slate-400">لا توجد تعليقات بعد. أول تعليق يظهر لكل الفريق.</p>}
               </div>
               <textarea
                 value={draft} onChange={event => setDraft(event.target.value)} maxLength={2000} rows={2}
                 placeholder="اكتب تعليقاً يراه فريق العمل…"
-                className="focus-ring w-full rounded-lg border border-slate-200 bg-white/70 p-2 text-[10px] outline-none dark:border-slate-700 dark:bg-slate-900"
+                className="focus-ring w-full rounded-lg border border-slate-200 bg-white/70 p-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900"
               />
               <button
                 type="button" disabled={draft.trim().length < 2 || busy === "comment"} onClick={() => void submitComment()}
-                className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-40 dark:bg-slate-700"
+                className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 dark:bg-slate-700"
               >
                 {busy === "comment" && <LoaderCircle size={13} className="animate-spin" />} إضافة تعليق للفريق
               </button>
             </div>
 
-            {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] text-rose-600 dark:bg-rose-950/30">{error}</p>}
+            {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:bg-rose-950/30">{error}</p>}
           </section>
         </div>
       </motion.div>

@@ -1,9 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-:root{--background:#f5f7fb;--foreground:#111827;--surface:rgba(255,255,255,.72);--stroke:rgba(255,255,255,.78);--muted:#7a8497;--brand:#16b8a6;--navy:#101827;--shadow:0 18px 55px rgba(27,44,75,.09)}
+:root{--background:#f5f7fb;--foreground:#111827;--surface:rgba(255,255,255,.72);--stroke:rgba(255,255,255,.78);--muted:#5b6577;--brand:#16b8a6;--navy:#101827;--shadow:0 18px 55px rgba(27,44,75,.09)}
 .dark{--background:#0b1120;--foreground:#edf2fb;--surface:rgba(21,31,51,.78);--stroke:rgba(255,255,255,.09);--muted:#9aa7bd;--shadow:0 18px 55px rgba(0,0,0,.25)}
-*{box-sizing:border-box}html{background:var(--background)}body{margin:0;background:radial-gradient(ellipse at 86% 3%,rgba(86,221,208,.17),transparent 26%),radial-gradient(ellipse at 9% 24%,rgba(154,134,255,.13),transparent 24%),var(--background);color:var(--foreground);font-family:"Cairo","IBM Plex Sans Arabic","Inter",system-ui,sans-serif;font-feature-settings:"tnum";min-height:100vh}button,input,select{font:inherit}button{cursor:pointer}::selection{background:#96eee2;color:#10202c}.glass{background:var(--surface);border:1px solid var(--stroke);box-shadow:var(--shadow);backdrop-filter:blur(22px)}.panel{border-radius:22px}.muted{color:var(--muted)}.focus-ring:focus-visible{outline:3px solid rgba(22,184,166,.45);outline-offset:2px}.animate-in{animation:rise .45s ease both}@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+*{box-sizing:border-box}html{background:var(--background)}body{margin:0;background:radial-gradient(ellipse at 86% 3%,rgba(86,221,208,.17),transparent 26%),radial-gradient(ellipse at 9% 24%,rgba(154,134,255,.13),transparent 24%),var(--background);color:var(--foreground);font-family:var(--font-arabic),"Cairo","IBM Plex Sans Arabic","Inter",system-ui,sans-serif;font-feature-settings:"tnum";min-height:100vh}button,input,select{font:inherit}button{cursor:pointer}::selection{background:#96eee2;color:#10202c}.glass{background:var(--surface);border:1px solid var(--stroke);box-shadow:var(--shadow);backdrop-filter:blur(22px)}.panel{border-radius:22px}.muted{color:var(--muted)}.focus-ring:focus-visible{outline:3px solid rgba(22,184,166,.45);outline-offset:2px}.animate-in{animation:rise .45s ease both}@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* Clearer text in light mode: the light greys go one shade darker. Same weight as the
+   utility (via :where), and later in the file, so hover/focus colours still win. Dark mode is unchanged. */
+:where(html:not(.dark)) .text-slate-300{color:#94a3b8}
+:where(html:not(.dark)) .text-slate-400{color:#64748b}
+:where(html:not(.dark)) .text-slate-500{color:#475569}
 @media print {
   @page { size: A4; margin: 14mm; }
   body * { visibility: hidden !important; }
