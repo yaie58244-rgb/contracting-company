@@ -85,12 +85,23 @@ export async function fetchPropertyImages(id:string):Promise<PropertyImage[]>{co
 export async function addPropertyImage(propertyId:string,imageData:string){const {error}=await createClient().rpc("add_property_image",{p_property_id:propertyId,p_image_data:imageData});if(error)throw error;}
 export async function deletePropertyImage(imageId:string){const {error}=await createClient().rpc("delete_property_image",{p_image_id:imageId});if(error)throw error;}
 
-/** Phone photos are several MB; shrink to at most 1600px JPEG so they fit the 1.5 MB limit. */
-export function compressImage(file:File):Promise<string>{
+/** Draws an image or canvas at most maxSide px wide/tall as JPEG, lowering quality until it fits maxLength. */
+export function shrinkToJpeg(source:CanvasImageSource,width:number,height:number,maxSide=1600,maxLength=1_900_000):string{
+  const scale=Math.min(1,maxSide/Math.max(width,height));const canvas=document.createElement("canvas");canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+  const ctx=canvas.getContext("2d");if(!ctx)throw new Error("تعذر تجهيز الصورة.");
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,0,0,canvas.width,canvas.height);
+  let quality=.85;let data=canvas.toDataURL("image/jpeg",quality);
+  while(data.length>maxLength&&quality>.4){quality-=.1;data=canvas.toDataURL("image/jpeg",quality)}
+  if(data.length>maxLength)throw new Error("الصورة كبيرة جدًا.");
+  return data;
+}
+
+/** Phone photos are several MB; shrink to at most 1600px JPEG so they fit the 1.5 MB limit (plans: pass a bigger size). */
+export function compressImage(file:File,maxSide=1600,maxLength=1_900_000):Promise<string>{
   return new Promise((resolve,reject)=>{
     if(!file.type.startsWith("image/")){reject(new Error("اختر ملف صورة."));return}
     const url=URL.createObjectURL(file);const img=new Image();
-    img.onload=()=>{URL.revokeObjectURL(url);let quality=.82;const scale=Math.min(1,1600/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);const ctx=canvas.getContext("2d");if(!ctx){reject(new Error("تعذر تجهيز الصورة."));return}ctx.drawImage(img,0,0,canvas.width,canvas.height);let data=canvas.toDataURL("image/jpeg",quality);while(data.length>1_900_000&&quality>.4){quality-=.12;data=canvas.toDataURL("image/jpeg",quality)}data.length>1_900_000?reject(new Error("الصورة كبيرة جدًا.")):resolve(data)};
+    img.onload=()=>{URL.revokeObjectURL(url);try{resolve(shrinkToJpeg(img,img.width,img.height,maxSide,maxLength))}catch(error){reject(error)}};
     img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("تعذر قراءة الصورة."))};
     img.src=url;
   });

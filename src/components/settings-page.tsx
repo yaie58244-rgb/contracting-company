@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, Check, ListTree, LoaderCircle, Pencil, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CompanyProfileEditor } from "@/components/company-profile-editor";
+import { DistributionMediaManager } from "@/components/distribution-media-manager";
 import { CODE_FIELDS, LOCAL_CODES_KEY, invalidateCodeLists, readLocalCodes, type CodeRow } from "@/lib/code-lists";
 
 const seed: CodeRow[] = [
@@ -126,6 +127,7 @@ export function SettingsPage({ remote }: { remote: boolean }) {
         </div>}
       </section>
     </div>
+    <DistributionMediaManager remote={remote}/>
     {!remote && <div className="rounded-xl bg-amber-50/80 p-3 text-xs text-amber-800">وضع المعاينة يحفظ الأكواد في هذا المتصفح فقط. لإدارة أكواد الشركة المشتركة، سجّل الدخول بحساب مدير.</div>}
     {draft && <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={e => e.target === e.currentTarget && setDraft(null)}>
       <form onSubmit={save} className="w-full max-w-md space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">

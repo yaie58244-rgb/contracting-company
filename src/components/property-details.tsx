@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { createPortal } from "react-dom";
 import { ArrowDownUp, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Heart, Image as ImageIcon, ImagePlus, LoaderCircle, MessageCircle, Pencil, Phone, Printer, Save, Send, Trash2, X } from "lucide-react";
 import type { Property } from "@/lib/types";
 import { PROPERTY_EDIT_SCOPES, addPropertyComment, addPropertyImage, compressImage, deletePropertyImage, fetchPropertyComments, fetchPropertyFile, fetchPropertyImages, type PropertyComment, type PropertyEditScope, type PropertyFilePatch, type PropertyImage } from "@/lib/property-data";
@@ -10,6 +9,8 @@ import { CodedInput } from "@/components/coded-input";
 import { sectorsOf, useAreaSectors } from "@/lib/area-sectors";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/company-profile-data";
 import { dialable } from "@/lib/phone-format";
+import { ImageViewer, type ViewerImage } from "@/components/image-viewer";
+import { distributionKindLabel, fetchPropertyDistributionMedia, type DistributionMedia } from "@/lib/distribution-media";
 import { digits } from "@/lib/utils";
 
 // Built-in values, used until the admin codes these fields in Settings.
@@ -73,6 +74,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   const [images, setImages] = useState<PropertyImage[]>([]);
   const [imageBusy, setImageBusy] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [distributionMedia, setDistributionMedia] = useState<DistributionMedia[]>([]);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
 
   const loadFile = useCallback(async () => {
@@ -104,10 +106,11 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   useEffect(() => {
     if (!remote) { setImages(property.imageData ? [{ storage_path: property.imageData, caption: "صورة العقار" }] : []); return; }
     let active = true;
-    void Promise.allSettled([fetchCompanyProfile(), fetchPropertyImages(property.id)]).then(([profile, photos]) => {
+    void Promise.allSettled([fetchCompanyProfile(), fetchPropertyImages(property.id), fetchPropertyDistributionMedia(property.id)]).then(([profile, photos, shared]) => {
       if (!active) return;
       if (profile.status === "fulfilled") setCompany(profile.value);
       if (photos.status === "fulfilled") setImages(photos.value);
+      setDistributionMedia(shared.status === "fulfilled" ? shared.value : []);
     });
     return () => { active = false; };
   }, [remote, property.id, property.imageData]);
@@ -115,17 +118,12 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   // Esc closes the file, like the back button.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      // While a photo is enlarged, Esc and the arrows work on the photo only.
-      if (viewer !== null) {
-        if (event.key === "Escape") setViewer(null);
-        else if (event.key === "ArrowLeft") setViewer(i => i === null ? i : Math.min(images.length - 1, i + 1));
-        else if (event.key === "ArrowRight") setViewer(i => i === null ? i : Math.max(0, i - 1));
-        return;
-      }
+      // While a photo is enlarged, Esc and the arrows belong to the photo viewer.
+      if (viewer !== null) return;
       if (event.key === "Escape" && !editing) onClose();
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, editing, viewer, images.length]);
+  }, [onClose, editing, viewer]);
   useEffect(() => { setViewer(null); }, [property.id]);
 
   const save = async (patch: PropertyFilePatch) => {
@@ -163,6 +161,16 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
   };
 
   const reloadImages = async () => setImages(await fetchPropertyImages(property.id));
+  const gallery: ViewerImage[] = [
+    ...images.map((image, index) => ({ src: image.storage_path, label: image.caption && image.caption !== "صورة العقار" ? image.caption : `صورة العقار ${index + 1}` })),
+    ...distributionMedia.map(item => ({ src: item.image_data, label: `${distributionKindLabel[item.kind]} التوزيعة ${item.street}${item.sector ? ` · ${item.sector}` : ""}` })),
+  ];
+  // A drawing (arrow on the house, a circle…) is saved as a new photo of this property.
+  const saveDrawing = may("images") && remote ? async (dataUrl: string) => {
+    if (images.length >= 12) throw new Error("ملف العقار وصل لـ ١٢ صورة، احذف صورة الأول.");
+    await addPropertyImage(property.id, dataUrl);
+    await reloadImages();
+  } : undefined;
   const addImages = async (files: File[]) => {
     if (!files.length) return;
     setImageBusy(true); setError("");
@@ -267,6 +275,10 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
           <div className="p-2.5">
             {images.length ? <div className="grid grid-cols-2 gap-2">{images.map((image, index) => <figure key={image.id ?? `${index}-${image.caption}`} className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900"><button type="button" onClick={() => setViewer(index)} aria-label={`تكبير الصورة ${index + 1}`} className="block h-full w-full"><img src={image.storage_path} alt={image.caption || `صورة العقار ${index + 1}`} className="h-full w-full object-cover transition group-hover:scale-105"/></button>{may("images") && remote && image.id && <button type="button" disabled={imageBusy} onClick={() => void removeImage(image.id!)} aria-label={`حذف الصورة ${index + 1}`} className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-rose-600/90 px-1.5 py-1 text-xs font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"><Trash2 size={11}/>حذف</button>}</figure>)}</div>
               : <div className="grid aspect-[2/1] place-items-center rounded-lg border border-dashed border-slate-300 text-[13px] text-slate-400 dark:border-slate-700">لا توجد صور مرفقة.</div>}
+            {distributionMedia.length > 0 && <div className="mt-3 border-t border-slate-200 pt-2.5 dark:border-slate-700">
+              <div className="mb-2 text-xs font-black text-slate-600 dark:text-slate-300">صور وخرائط التوزيعة {property.street}</div>
+              <div className="grid grid-cols-2 gap-2">{distributionMedia.map((item, index) => <button key={item.id} type="button" onClick={() => setViewer(images.length + index)} aria-label={`تكبير ${distributionKindLabel[item.kind]} التوزيعة`} className="group relative aspect-square overflow-hidden rounded-lg border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"><img src={item.image_data} alt={`${distributionKindLabel[item.kind]} التوزيعة ${item.street}`} className="h-full w-full object-cover transition group-hover:scale-105"/><span className={`absolute right-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white shadow ${item.kind === "map" ? "bg-indigo-600" : "bg-teal-600"}`}>{distributionKindLabel[item.kind]}</span></button>)}</div>
+            </div>}
           </div>
           {may("images") && remote && <label className={`m-2.5 mt-0 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-teal-400 px-3 py-2 text-[13px] font-bold text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30 ${imageBusy || images.length >= 12 ? "pointer-events-none opacity-50" : ""}`}>{imageBusy ? <LoaderCircle size={14} className="animate-spin"/> : <ImagePlus size={14}/>}{images.length >= 12 ? "وصلت لـ ١٢ صورة" : "إضافة صورة"}<input type="file" accept="image/*" multiple className="sr-only" onChange={event => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void addImages(files); }}/></label>}
         </section>
@@ -275,16 +287,7 @@ export function PropertyDetails({ property, favorite, remote, navigationIds = [p
 
       {navigationIds.length > 1 && <footer className="flex items-center justify-between gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-700"><div className="flex items-center gap-2"><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex <= 0 ? navigationIds.length - 1 : navigationIndex - 1])} disabled={editing} aria-label="العقار السابق" title={navigationIndex <= 0 ? "روح لآخر عقار في النتائج" : "العقار السابق"} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-300 text-slate-800 hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><ChevronRight size={19}/></button>{onReverse && <button type="button" onClick={onReverse} disabled={editing} title="اعكس الترتيب وابدأ من الطرف التاني" className="flex h-10 items-center gap-1.5 rounded-xl border border-teal-300 bg-teal-50 px-3 text-[13px] font-bold text-teal-700 disabled:opacity-30 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300"><ArrowDownUp size={15}/>{reversed ? "من الآخر للأول" : "من الأول للآخر"}</button>}</div><span className="text-[13px] text-slate-500">العقار {(navigationIndex + 1).toLocaleString("ar-KW")} من {navigationIds.length.toLocaleString("ar-KW")} في النتائج</span><button type="button" onClick={() => onNavigate?.(navigationIds[navigationIndex >= navigationIds.length - 1 ? 0 : navigationIndex + 1])} disabled={editing} aria-label="العقار التالي" title={navigationIndex >= navigationIds.length - 1 ? "ارجع لأول عقار في النتائج" : "العقار التالي"} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-300 text-slate-800 hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><ChevronLeft size={19}/></button></footer>}
 
-      {/* Rendered on <body> so the animated file window does not clip it. */}
-      {viewer !== null && images[viewer] && typeof document !== "undefined" && createPortal(<div role="dialog" aria-modal="true" aria-label="صورة العقار مكبّرة" onMouseDown={e => e.target === e.currentTarget && setViewer(null)} className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4">
-        <img src={images[viewer].storage_path} alt={images[viewer].caption || `صورة العقار ${viewer + 1}`} className="max-h-[90vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"/>
-        <button type="button" onClick={() => setViewer(null)} aria-label="إغلاق الصورة" className="absolute left-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"><X size={20}/></button>
-        {images.length > 1 && <>
-          <button type="button" disabled={viewer <= 0} onClick={() => setViewer(viewer - 1)} aria-label="الصورة السابقة" className="absolute right-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"><ChevronRight size={22}/></button>
-          <button type="button" disabled={viewer >= images.length - 1} onClick={() => setViewer(viewer + 1)} aria-label="الصورة التالية" className="absolute left-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"><ChevronLeft size={22}/></button>
-          <div className="absolute bottom-4 rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold text-white">{(viewer + 1).toLocaleString("ar-KW")} / {images.length.toLocaleString("ar-KW")}</div>
-        </>}
-      </div>, document.body)}
+      {viewer !== null && gallery[viewer] && <ImageViewer images={gallery} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} onSaveEdit={saveDrawing} editLabel="ارسم وعلّم البيت"/>}
 
       <div className="print-sheet hidden" dir="rtl"><header className="mb-8 flex items-center justify-between border-b-2 border-slate-800 pb-5"><img src={company?.logo_url || "/brand/albatoul-logo.png"} alt="شعار الشركة" className="h-20 max-w-40 object-contain"/><div><h1 className="text-2xl font-black">{company?.name_ar || "ملف العقار"}</h1>{company?.name_en && <div className="mt-1 text-sm" dir="ltr">{company.name_en}</div>}<p className="mt-2 text-[13px]">{[company?.phone && `هاتف: ${company.phone}`, company?.fax && `فاكس: ${company.fax}`, company?.address].filter(Boolean).join(" · ")}</p></div><div className="text-left text-sm"><b>{property.code}</b><div className="mt-1">{dateFormat.format(new Date(property.date))}</div></div></header><h2 className="mb-4 text-xl font-bold">{property.type} · {property.offer}</h2><div className="grid grid-cols-3 gap-4 text-sm"><PrintField label="اسم العميل" value={property.client}/><PrintField label="رقم التليفون" value={phones[0] ?? "—"}/><PrintField label="رقم ٢" value={phones[1] ?? "—"}/><PrintField label="نوع الموقع" value={property.locationType || "—"}/><PrintField label="نوع العرض" value={property.offer}/><PrintField label="المنطقة" value={property.area}/><PrintField label="القطاع" value={property.sector || "—"}/><PrintField label="القطعة" value={property.block || "—"}/><PrintField label="التوزيعة" value={property.street || "—"}/><PrintField label="القسيمة" value={property.plot || "—"}/><PrintField label="المساحة" value={`${property.size} م²`}/><PrintField label="السعر" value={property.price === null ? "مخفي" : `${property.price.toLocaleString("en-KW")} د.ك`}/><PrintField label="الحالة" value={statusLabel(property.status)}/></div>{comments.length > 0 && <table className="mt-6 w-full border text-right text-[13px]"><thead><tr><th className="border p-2">اسم المسوق</th><th className="border p-2">التاريخ</th><th className="border p-2">التعليق</th></tr></thead><tbody>{comments.slice(0, 20).map(comment => <tr key={comment.id}><td className="border p-2">{comment.authorName}</td><td className="border p-2">{dateFormat.format(new Date(comment.createdAt))}</td><td className="border p-2">{comment.body}</td></tr>)}</tbody></table>}<footer className="mt-12 border-t pt-3 text-center text-xs text-slate-500">نسخة مطبوعة من نظام إدارة العقارات</footer></div>
     </motion.section>
