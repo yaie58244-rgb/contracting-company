@@ -7,8 +7,9 @@ import { isMarketerEmail } from "@/lib/marketer-auth";
 import { employeeRequest, fetchEmployees, updateEmployee, type EmployeeRecord } from "@/lib/employee-data";
 import { PROPERTY_EDIT_SCOPES as ALL_EDIT_SCOPES, propertyEditScopeLabels, propertyEditScopeShort, type PropertyEditScope } from "@/lib/property-data";
 
-// The property file has no map any more, so there is nothing to allow there.
-const PROPERTY_EDIT_SCOPES = ALL_EDIT_SCOPES.filter(scope => scope !== "map");
+// The property file has no map or own photos any more (photos come from Settings), so nothing to allow there.
+const HIDDEN_SCOPES: string[] = ["map", "images"];
+const PROPERTY_EDIT_SCOPES = ALL_EDIT_SCOPES.filter(scope => !HIDDEN_SCOPES.includes(scope));
 import { fetchRoleMatrix, type RoleRecord } from "@/lib/role-data";
 import { usernameError } from "@/lib/username";
 
@@ -117,7 +118,7 @@ export function EmployeesPage({ remote }: { remote: boolean }) {
   };
   // Summary in the table; the button opens the checkboxes.
   const editCell = (person: EmployeeRecord) => {
-    const custom = Array.isArray(person.property_edit_scopes) ? person.property_edit_scopes.filter(x => x !== "map") : person.property_edit_scopes;
+    const custom = Array.isArray(person.property_edit_scopes) ? person.property_edit_scopes.filter(x => !HIDDEN_SCOPES.includes(x)) : person.property_edit_scopes;
     const summary = !Array.isArray(custom) ? `حسب الدور (${roleAllowsEdit(person) ? "كل حاجة" : "ممنوع"})`
       : !custom.length ? "ممنوع" : PROPERTY_EDIT_SCOPES.every(x => custom.includes(x)) ? "كل حاجة"
       : custom.map(x => propertyEditScopeShort[x as PropertyEditScope] ?? x).join("، ");

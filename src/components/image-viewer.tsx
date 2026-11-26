@@ -1,12 +1,21 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpLeft, ChevronLeft, ChevronRight, Circle, Hand, LoaderCircle, Maximize2, Minus, PenLine, Plus, Save, Square, Trash2, Undo2, X } from "lucide-react";
+import { ArrowUpLeft, ChevronLeft, ChevronRight, Circle, Download, Hand, LoaderCircle, Maximize2, Minus, PenLine, Plus, Save, Square, Trash2, Undo2, X } from "lucide-react";
 import { shrinkToJpeg } from "@/lib/property-data";
 
 export type ViewerImage = { src: string; label?: string };
 
 const MIN_ZOOM = 1, MAX_ZOOM = 8;
+
+/** Saves a data-URL picture to the computer, named after what it shows (e.g. «خريطة التوزيعة 001.jpg»). */
+export function downloadImage(src: string, name: string) {
+  const type = /^data:image\/(png|webp|jpeg)/.exec(src)?.[1] ?? "jpeg";
+  const link = document.createElement("a");
+  link.href = src;
+  link.download = `${(name || "صورة").replace(/[\\/:*?"<>|]+/g, "-").trim()}.${type === "jpeg" ? "jpg" : type}`;
+  document.body.appendChild(link); link.click(); link.remove();
+}
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Wheel zooms toward the pointer, dragging moves the picture, double-click toggles 1× / 2.5×. */
@@ -59,7 +68,7 @@ export function ImageViewer({ images, index, onIndex, onClose, onSaveEdit, editL
   }, [editing, index, images.length, onClose, onIndex]);
 
   if (!image || typeof document === "undefined") return null;
-  if (editing && onSaveEdit) return <ImageAnnotator src={image.src} onCancel={() => setEditing(false)} onSave={async dataUrl => { await onSaveEdit(dataUrl); setEditing(false); }}/>;
+  if (editing) return <ImageAnnotator src={image.src} name={image.label ?? "صورة"} onCancel={() => setEditing(false)} onSave={onSaveEdit ? async dataUrl => { await onSaveEdit(dataUrl); setEditing(false); } : undefined}/>;
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (zoom === 1 || event.button !== 0) return;
@@ -76,7 +85,8 @@ export function ImageViewer({ images, index, onIndex, onClose, onSaveEdit, editL
       <button type="button" onClick={onClose} aria-label="إغلاق الصورة" className={zoomButton}><X size={20}/></button>
       {image.label && <span className="rounded-full bg-white/15 px-3 py-1.5 text-[13px] font-bold">{image.label}</span>}
       <div className="mr-auto flex items-center gap-2">
-        {onSaveEdit && <button type="button" onClick={() => setEditing(true)} className="flex h-10 items-center gap-2 rounded-full bg-teal-500 px-4 text-[13px] font-bold text-white hover:bg-teal-400"><PenLine size={16}/>{editLabel}</button>}
+        <button type="button" onClick={() => downloadImage(image.src, image.label ?? `صورة ${index + 1}`)} className="flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-[13px] font-bold text-white hover:bg-white/25"><Download size={16}/>تنزيل الصورة</button>
+        <button type="button" onClick={() => setEditing(true)} className="flex h-10 items-center gap-2 rounded-full bg-teal-500 px-4 text-[13px] font-bold text-white hover:bg-teal-400"><PenLine size={16}/>{onSaveEdit ? editLabel : "ارسم وعلّم ونزّل"}</button>
         <button type="button" onClick={() => step(1 / 1.5, box.current)} disabled={zoom <= MIN_ZOOM} aria-label="تصغير" className={zoomButton}><Minus size={18}/></button>
         <span className="w-14 text-center text-[13px] font-bold tabular-nums">{Math.round(zoom * 100)}%</span>
         <button type="button" onClick={() => step(1.5, box.current)} disabled={zoom >= MAX_ZOOM} aria-label="تكبير" className={zoomButton}><Plus size={18}/></button>
@@ -138,7 +148,7 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: Shape) {
 }
 
 /** Draw arrows, circles, boxes or free lines on a copy of the photo; the original stays untouched. */
-export function ImageAnnotator({ src, onCancel, onSave }: { src: string; onCancel: () => void; onSave: (dataUrl: string) => Promise<void> }) {
+export function ImageAnnotator({ src, name = "صورة", onCancel, onSave }: { src: string; name?: string; onCancel: () => void; onSave?: (dataUrl: string) => Promise<void> }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
   const [picture, setPicture] = useState<HTMLImageElement | null>(null);
@@ -217,8 +227,13 @@ export function ImageAnnotator({ src, onCancel, onSave }: { src: string; onCance
     setDraft(null);
   };
 
+  // Full size, with the drawing on it.
+  const download = () => {
+    if (!canvas.current) return;
+    downloadImage(canvas.current.toDataURL("image/jpeg", .92), shapes.length ? `${name} - معلّمة` : name);
+  };
   const save = async () => {
-    if (!canvas.current || !picture) return;
+    if (!canvas.current || !picture || !onSave) return;
     setSaving(true); setError("");
     try { await onSave(shrinkToJpeg(canvas.current, picture.width, picture.height)); }
     catch (cause) { setError(cause && typeof cause === "object" && "message" in cause ? String(cause.message) : "تعذر حفظ الصورة."); }
@@ -250,11 +265,12 @@ export function ImageAnnotator({ src, onCancel, onSave }: { src: string; onCance
       {picture && <canvas ref={canvas} style={{ width: picture.width * fit, height: picture.height * fit, transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} className="absolute left-1/2 top-1/2 shadow-2xl"/>}
     </div>
     <div className="flex flex-wrap items-center gap-3 border-t border-white/10 p-3">
-      <span className="text-xs text-white/70">اختار أداة وارسم على الصورة · عجلة الماوس للتكبير · زرار الماوس الأوسط أو «تحريك الصورة» للتحريك. الأصل مش هيتغير، التعديل بيتحفظ كصورة جديدة.</span>
+      <span className="text-xs text-white/70">اختار أداة وارسم على الصورة · عجلة الماوس للتكبير · زرار الماوس الأوسط أو «تحريك الصورة» للتحريك. الأصل مش بيتغير.</span>
       {error && <span role="alert" className="text-[13px] font-bold text-rose-300">{error}</span>}
       <div className="mr-auto flex gap-2">
         <button type="button" onClick={onCancel} className="h-10 rounded-xl px-4 text-[13px] font-bold text-white/80 hover:bg-white/10">إلغاء</button>
-        <button type="button" onClick={() => void save()} disabled={saving || !picture || !shapes.length} className="flex h-10 items-center gap-2 rounded-xl bg-teal-500 px-5 text-[13px] font-bold text-white disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin"/> : <Save size={15}/>}حفظ كصورة جديدة</button>
+        <button type="button" onClick={download} disabled={!picture} className="flex h-10 items-center gap-2 rounded-xl bg-white/15 px-5 text-[13px] font-bold text-white hover:bg-white/25 disabled:opacity-40"><Download size={15}/>تنزيل الصورة</button>
+        {onSave && <button type="button" onClick={() => void save()} disabled={saving || !picture || !shapes.length} className="flex h-10 items-center gap-2 rounded-xl bg-teal-500 px-5 text-[13px] font-bold text-white disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin"/> : <Save size={15}/>}حفظ كصورة جديدة</button>}
       </div>
     </div>
   </div>, document.body);
